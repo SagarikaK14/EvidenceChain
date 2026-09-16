@@ -1,57 +1,226 @@
-# Sample Hardhat 3 Project (`node:test` and `viem`)
+# EvidenceChain
 
-This project showcases a Hardhat 3 project using the native Node.js test runner (`node:test`) and the `viem` library for Ethereum interactions.
-
-To learn more about Hardhat 3, please visit the [Getting Started guide](https://hardhat.org/docs/getting-started#getting-started-with-hardhat-3). To share your feedback, join our [Hardhat 3](https://hardhat.org/hardhat3-telegram-group) Telegram group or [open an issue](https://github.com/NomicFoundation/hardhat/issues/new) in our GitHub issue tracker.
+EvidenceChain is a blockchain-based digital evidence management system designed to provide evidence integrity, custody tracking, and access history.
 
 ## Project Overview
 
-This example project includes:
+EvidenceChain uses a Solidity smart contract deployed on a local Hardhat blockchain.
 
-- A simple Hardhat configuration file.
-- Foundry-compatible Solidity unit tests.
-- TypeScript integration tests using [`node:test`](nodejs.org/api/test.html), the new Node.js native test runner, and [`viem`](https://viem.sh/).
-- Examples demonstrating how to connect to different types of networks, including locally simulating OP mainnet.
+The smart contract provides:
 
-## Usage
+- Evidence registration
+- SHA-256 evidence hash storage
+- Evidence integrity verification
+- Custody transfer
+- Custody transfer history
+- Evidence access recording
+- Access history
+- Blockchain events
 
-### Running Tests
+## Project Structure
 
-To run all the tests in the project, execute the following command:
+```text
+EvidenceChain/
+├── contracts/
+│   └── EvidenceChain.sol
+├── scripts/
+│   └── deploy.js
+├── frontend/
+├── artifacts/
+├── hardhat.config.ts
+├── package.json
+└── README.md
+```
 
-```shell
+## Requirements
+
+The project requires:
+
+- Node.js
+- npm
+- Hardhat
+
+Install the project dependencies:
+
+```bash
+npm install
+```
+
+## Smart Contract
+
+The main smart contract is located at:
+
+```text
+contracts/EvidenceChain.sol
+```
+
+The contract provides:
+
+- `registerEvidence()` - registers evidence on the blockchain
+- `getEvidence()` - retrieves an evidence record
+- `verifyEvidence()` - verifies evidence integrity using its hash
+- `transferCustody()` - transfers evidence custody
+- `getCustodyHistory()` - retrieves custody transfer history
+- `recordAccess()` - records access to evidence
+- `getAccessHistory()` - retrieves evidence access history
+
+## Local Blockchain Setup
+
+### 1. Build the Smart Contract
+
+Run:
+
+```bash
+npx hardhat clean
+npx hardhat build
+```
+
+The compiled contract artifact is generated at:
+
+```text
+artifacts/contracts/EvidenceChain.sol/EvidenceChain.json
+```
+
+### 2. Start the Hardhat Blockchain
+
+Open Terminal 1 and run:
+
+```bash
+npx hardhat node
+```
+
+The local blockchain runs at:
+
+```text
+http://127.0.0.1:8545
+```
+
+Keep this terminal running.
+
+### 3. Deploy the Smart Contract
+
+Open Terminal 2 and run:
+
+```bash
+node scripts/deploy.js
+```
+
+Example output:
+
+```text
+Connecting to local Hardhat blockchain...
+Deploying EvidenceChain...
+EvidenceChain deployed!
+Contract address: 0x...
+```
+
+The displayed address is the contract address for the current local Hardhat blockchain session.
+
+## Deployment Reproducibility
+
+The EvidenceChain smart contract can be reproduced and deployed on a fresh local Hardhat blockchain using the repository files and deployment script.
+
+The deployment process is:
+
+```text
+contracts/EvidenceChain.sol
+        ↓
+npx hardhat build
+        ↓
+EvidenceChain.json
+        ↓
+node scripts/deploy.js
+        ↓
+Deployed EvidenceChain contract
+```
+
+Another developer can clone the repository, install the dependencies, build the contract, start a local Hardhat blockchain, and deploy the contract using the provided deployment script.
+
+## Local Blockchain State
+
+The local Hardhat blockchain is temporary and is intended for development and testing.
+
+When the Hardhat node is stopped, the current local blockchain session ends. After starting a new Hardhat node, deploy the EvidenceChain contract again:
+
+```bash
+node scripts/deploy.js
+```
+
+The deployment script will print the contract address for the new blockchain session.
+
+## Testing
+
+Build the contract:
+
+```bash
+npx hardhat clean
+npx hardhat build
+```
+
+Run the Hardhat tests:
+
+```bash
 npx hardhat test
 ```
 
-You can also selectively run the Solidity or `node:test` tests:
+Test contract deployment:
 
-```shell
-npx hardhat test solidity
-npx hardhat test nodejs
+```bash
+node scripts/deploy.js
 ```
 
-### Make a deployment to Sepolia
+## Development Workflow
 
-This project includes an example Ignition module to deploy the contract. You can deploy this module to a locally simulated chain or to Sepolia.
-
-To run the deployment to a local chain:
-
-```shell
-npx hardhat ignition deploy ignition/modules/Counter.ts
+```text
+Install dependencies
+        ↓
+Start Hardhat blockchain
+        ↓
+Build smart contract
+        ↓
+Deploy EvidenceChain
+        ↓
+Start backend
+        ↓
+Start frontend
+        ↓
+Test EvidenceChain
 ```
 
-To run the deployment to Sepolia, you need an account with funds to send the transaction. The provided Hardhat configuration includes a Configuration Variable called `SEPOLIA_PRIVATE_KEY`, which you can use to set the private key of the account you want to use.
+## Evidence Integrity Verification
 
-You can set the `SEPOLIA_PRIVATE_KEY` variable using the `hardhat-keystore` plugin or by setting it as an environment variable.
+EvidenceChain stores the hash of an evidence file on the blockchain.
 
-To set the `SEPOLIA_PRIVATE_KEY` config variable using `hardhat-keystore`:
+During verification, the current hash of the evidence file is compared with the hash stored on the blockchain.
 
-```shell
-npx hardhat keystore set SEPOLIA_PRIVATE_KEY
-```
+If the hashes match, the evidence is considered unchanged.
 
-After setting the variable, you can run the deployment with the Sepolia network:
+If the hashes do not match, the evidence integrity check fails.
 
-```shell
-npx hardhat ignition deploy --network sepolia ignition/modules/Counter.ts
-```
+## Chain of Custody
+
+EvidenceChain records custody transfers on the blockchain.
+
+The current custodian can transfer custody to another blockchain address.
+
+Each custody transfer records:
+
+- Evidence ID
+- Previous custodian
+- New custodian
+- Timestamp
+
+## Access History
+
+EvidenceChain records evidence access events.
+
+Each access record contains:
+
+- Blockchain address that accessed the evidence
+- Timestamp
+
+The access history can be retrieved from the smart contract.
+
+## Repository
+
+The repository contains the EvidenceChain smart contract, deployment script, frontend, and supporting project configuration required to develop and test the system.

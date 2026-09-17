@@ -11,21 +11,32 @@ const API_BASE_URL = "http://127.0.0.1:5001";
 // ============================================================
 
 async function parseResponse(response) {
+
   const text = await response.text();
 
   let data;
 
   try {
-    data = text ? JSON.parse(text) : {};
+
+    data = text
+      ? JSON.parse(text)
+      : {};
+
   } catch {
+
     data = {
-      message: text || "Unexpected server response.",
+
+      message:
+        text ||
+        "Unexpected server response."
     };
   }
 
   if (!response.ok) {
+
     throw new Error(
-      data.message || "Request failed."
+      data.message ||
+      "Request failed."
     );
   }
 
@@ -38,6 +49,7 @@ async function parseResponse(response) {
 // ============================================================
 
 export async function checkBackendHealth() {
+
   const response = await fetch(
     `${API_BASE_URL}/api/health`
   );
@@ -55,12 +67,22 @@ export async function registerEvidenceAPI(
   caseId,
   description = ""
 ) {
-  const formData = new FormData();
 
-  formData.append("file", file);
-  formData.append("caseId", caseId);
+  const formData =
+    new FormData();
+
+  formData.append(
+    "file",
+    file
+  );
+
+  formData.append(
+    "caseId",
+    caseId
+  );
 
   if (description) {
+
     formData.append(
       "description",
       description
@@ -86,6 +108,7 @@ export async function registerEvidenceAPI(
 export async function getEvidenceAPI(
   evidenceId
 ) {
+
   const response = await fetch(
     `${API_BASE_URL}/api/evidence/${encodeURIComponent(
       evidenceId
@@ -104,15 +127,19 @@ export async function verifyEvidenceAPI(
   evidenceId,
   currentHash
 ) {
+
   const response = await fetch(
     `${API_BASE_URL}/api/evidence/${encodeURIComponent(
       evidenceId
     )}/verify`,
     {
       method: "POST",
+
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type":
+          "application/json",
       },
+
       body: JSON.stringify({
         currentHash,
       }),
@@ -124,24 +151,183 @@ export async function verifyEvidenceAPI(
 
 
 // ============================================================
-// TRANSFER CUSTODY
+// CHECK VIEW ACCESS
 // ============================================================
 
-export async function transferCustodyAPI(
+export async function checkViewAccessAPI(
   evidenceId,
-  newCustodian
+  userAddress
 ) {
+
   const response = await fetch(
     `${API_BASE_URL}/api/evidence/${encodeURIComponent(
       evidenceId
-    )}/transfer`,
+    )}/view-access`,
     {
       method: "POST",
+
       headers: {
-        "Content-Type": "application/json",
+        "Content-Type":
+          "application/json",
       },
+
       body: JSON.stringify({
-        newCustodian,
+        userAddress,
+      }),
+    }
+  );
+
+  return parseResponse(response);
+}
+
+
+// ============================================================
+// CHECK DOWNLOAD ACCESS
+// ============================================================
+
+export async function checkDownloadAccessAPI(
+  evidenceId,
+  userAddress
+) {
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/evidence/${encodeURIComponent(
+      evidenceId
+    )}/download-access`,
+    {
+      method: "POST",
+
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
+
+      body: JSON.stringify({
+        userAddress,
+      }),
+    }
+  );
+
+  return parseResponse(response);
+}
+
+
+// ============================================================
+// GRANT VIEW ACCESS
+// ============================================================
+
+export async function grantViewAccessAPI(
+  evidenceId,
+  userAddress
+) {
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/evidence/${encodeURIComponent(
+      evidenceId
+    )}/view-access/grant`,
+    {
+      method: "POST",
+
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
+
+      body: JSON.stringify({
+        userAddress,
+      }),
+    }
+  );
+
+  return parseResponse(response);
+}
+
+
+// ============================================================
+// REVOKE VIEW ACCESS
+// ============================================================
+
+export async function revokeViewAccessAPI(
+  evidenceId,
+  userAddress
+) {
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/evidence/${encodeURIComponent(
+      evidenceId
+    )}/view-access/revoke`,
+    {
+      method: "POST",
+
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
+
+      body: JSON.stringify({
+        userAddress,
+      }),
+    }
+  );
+
+  return parseResponse(response);
+}
+
+
+// ============================================================
+// GRANT DOWNLOAD ACCESS
+// ============================================================
+
+export async function grantDownloadAccessAPI(
+  evidenceId,
+  userAddress
+) {
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/evidence/${encodeURIComponent(
+      evidenceId
+    )}/download-access/grant`,
+    {
+      method: "POST",
+
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
+
+      body: JSON.stringify({
+        userAddress,
+      }),
+    }
+  );
+
+  return parseResponse(response);
+}
+
+
+// ============================================================
+// REVOKE DOWNLOAD ACCESS
+// ============================================================
+
+export async function revokeDownloadAccessAPI(
+  evidenceId,
+  userAddress
+) {
+
+  const response = await fetch(
+    `${API_BASE_URL}/api/evidence/${encodeURIComponent(
+      evidenceId
+    )}/download-access/revoke`,
+    {
+      method: "POST",
+
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
+
+      body: JSON.stringify({
+        userAddress,
       }),
     }
   );
@@ -155,14 +341,25 @@ export async function transferCustodyAPI(
 // ============================================================
 
 export async function recordAccessAPI(
-  evidenceId
+  evidenceId,
+  action
 ) {
+
   const response = await fetch(
     `${API_BASE_URL}/api/evidence/${encodeURIComponent(
       evidenceId
     )}/access`,
     {
       method: "POST",
+
+      headers: {
+        "Content-Type":
+          "application/json",
+      },
+
+      body: JSON.stringify({
+        action,
+      }),
     }
   );
 
@@ -177,27 +374,11 @@ export async function recordAccessAPI(
 export async function getAccessHistoryAPI(
   evidenceId
 ) {
+
   const response = await fetch(
     `${API_BASE_URL}/api/evidence/${encodeURIComponent(
       evidenceId
     )}/access-history`
-  );
-
-  return parseResponse(response);
-}
-
-
-// ============================================================
-// GET CUSTODY HISTORY
-// ============================================================
-
-export async function getCustodyHistoryAPI(
-  evidenceId
-) {
-  const response = await fetch(
-    `${API_BASE_URL}/api/evidence/${encodeURIComponent(
-      evidenceId
-    )}/custody-history`
   );
 
   return parseResponse(response);

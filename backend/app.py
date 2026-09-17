@@ -8,16 +8,19 @@ from blockchain import (
     get_evidence,
     register_evidence,
     verify_evidence,
-    transfer_custody,
+    can_view,
+    can_download,
+    grant_view_access,
+    revoke_view_access,
+    grant_download_access,
+    revoke_download_access,
     record_access,
-    get_access_history,
-    get_custody_history
+    get_access_history
 )
 
 from database.db import (
     get_db,
-    save_evidence,
-    update_custodian
+    save_evidence
 )
 
 
@@ -77,6 +80,23 @@ def generate_evidence_id():
         "EVD-"
         + uuid.uuid4().hex[:8].upper()
     )
+
+
+def get_request_address(data, field_name="userAddress"):
+    """
+    Extract a blockchain address from request data.
+    """
+
+    if not data:
+
+        return ""
+
+    return str(
+        data.get(
+            field_name,
+            ""
+        )
+    ).strip()
 
 
 # ============================================================
@@ -330,8 +350,20 @@ def register_evidence_route():
             evidence_hash
         )
 
+        registered_by = (
+            blockchain_result.get(
+                "registeredBy"
+            )
+        )
+
         # ----------------------------------------------------
         # SAVE METADATA IN SQLITE
+        #
+        # current_custodian is retained only because the
+        # existing database schema contains this column.
+        #
+        # It now represents the original registering owner
+        # rather than a transferable custody owner.
         # ----------------------------------------------------
 
         save_evidence(
@@ -348,15 +380,9 @@ def register_evidence_route():
 
             sha256_hash=evidence_hash,
 
-            registered_by=(
-                blockchain_result.get(
-                    "registeredBy"
-                )
-            ),
+            registered_by=registered_by,
 
-            blockchain_evidence_id=(
-                evidence_id
-            ),
+            blockchain_evidence_id=evidence_id,
 
             registration_tx_hash=(
                 blockchain_result[
@@ -364,11 +390,7 @@ def register_evidence_route():
                 ]
             ),
 
-            current_custodian=(
-                blockchain_result.get(
-                    "currentCustodian"
-                )
-            )
+            current_custodian=registered_by
         )
 
         # ----------------------------------------------------
@@ -406,17 +428,7 @@ def register_evidence_route():
                 ]
             ),
 
-            "registeredBy": (
-                blockchain_result.get(
-                    "registeredBy"
-                )
-            ),
-
-            "currentCustodian": (
-                blockchain_result.get(
-                    "currentCustodian"
-                )
-            )
+            "registeredBy": registered_by
 
         }), 201
 
@@ -551,91 +563,176 @@ def verify_evidence_route(evidence_id):
 
 
 # ============================================================
-# TRANSFER CUSTODY
+# CHECK VIEW ACCESS
 # ============================================================
 
 @app.route(
-    "/api/evidence/<evidence_id>/transfer",
+    "/api/evidence/<evidence_id>/view-access",
     methods=["POST"]
 )
-def transfer_custody_route(evidence_id):
+def check_view_access_route(evidence_id):
 
     try:
 
         data = request.get_json()
 
-        if not data:
+        user_address = get_request_address(
+            data
+        )
+
+        if not user_address:
 
             return jsonify({
 
                 "status": "error",
 
                 "message": (
-                    "Request body is required."
-                )
-            }), 400
-
-        new_custodian = data.get(
-            "newCustodian",
-            ""
-        ).strip()
-
-        if not new_custodian:
-
-            return jsonify({
-
-                "status": "error",
-
-                "message": (
-                    "New custodian address "
+                    "User blockchain address "
                     "is required."
                 )
             }), 400
 
-        # ----------------------------------------------------
-        # TRANSFER ON BLOCKCHAIN
-        # ----------------------------------------------------
-
-        blockchain_result = transfer_custody(
+        allowed = can_view(
 
             evidence_id,
 
-            new_custodian
+            user_address
         )
 
-        # ----------------------------------------------------
-        # UPDATE SQLITE
-        # ----------------------------------------------------
+        return jsonify({
 
-        update_custodian(
+            "status": "success",
+
+            "evidenceId": evidence_id,
+
+            "userAddress": user_address,
+
+            "canView": allowed
+
+        })
+
+    except Exception as error:
+
+        return jsonify({
+
+            "status": "error",
+
+            "message": str(error)
+
+        }), 500
+
+
+# ============================================================
+# CHECK DOWNLOAD ACCESS
+# ============================================================
+
+@app.route(
+    "/api/evidence/<evidence_id>/download-access",
+    methods=["POST"]
+)
+def check_download_access_route(evidence_id):
+
+    try:
+
+        data = request.get_json()
+
+        user_address = get_request_address(
+            data
+        )
+
+        if not user_address:
+
+            return jsonify({
+
+                "status": "error",
+
+                "message": (
+                    "User blockchain address "
+                    "is required."
+                )
+            }), 400
+
+        allowed = can_download(
 
             evidence_id,
 
-            blockchain_result[
-                "to"
-            ]
+            user_address
         )
 
-        # ----------------------------------------------------
-        # RESPONSE
-        # ----------------------------------------------------
+        return jsonify({
+
+            "status": "success",
+
+            "evidenceId": evidence_id,
+
+            "userAddress": user_address,
+
+            "canDownload": allowed
+
+        })
+
+    except Exception as error:
+
+        return jsonify({
+
+            "status": "error",
+
+            "message": str(error)
+
+        }), 500
+
+
+# ============================================================
+# GRANT VIEW ACCESS
+# ============================================================
+
+@app.route(
+    "/api/evidence/<evidence_id>/view-access/grant",
+    methods=["POST"]
+)
+def grant_view_access_route(evidence_id):
+
+    try:
+
+        data = request.get_json()
+
+        user_address = get_request_address(
+            data
+        )
+
+        if not user_address:
+
+            return jsonify({
+
+                "status": "error",
+
+                "message": (
+                    "User blockchain address "
+                    "is required."
+                )
+            }), 400
+
+        blockchain_result = grant_view_access(
+
+            evidence_id,
+
+            user_address
+        )
 
         return jsonify({
 
             "status": "success",
 
             "message": (
-                "Custody transferred "
+                "View access granted "
                 "successfully."
             ),
 
             "evidenceId": evidence_id,
 
-            "newCustodian": (
-                blockchain_result[
-                    "to"
-                ]
-            ),
+            "userAddress": user_address,
+
+            "action": "VIEW_GRANTED",
 
             "transactionHash": (
                 blockchain_result[
@@ -647,19 +744,239 @@ def transfer_custody_route(evidence_id):
                 blockchain_result[
                     "blockNumber"
                 ]
+            )
+
+        })
+
+    except Exception as error:
+
+        return jsonify({
+
+            "status": "error",
+
+            "message": str(error)
+
+        }), 500
+
+
+# ============================================================
+# REVOKE VIEW ACCESS
+# ============================================================
+
+@app.route(
+    "/api/evidence/<evidence_id>/view-access/revoke",
+    methods=["POST"]
+)
+def revoke_view_access_route(evidence_id):
+
+    try:
+
+        data = request.get_json()
+
+        user_address = get_request_address(
+            data
+        )
+
+        if not user_address:
+
+            return jsonify({
+
+                "status": "error",
+
+                "message": (
+                    "User blockchain address "
+                    "is required."
+                )
+            }), 400
+
+        blockchain_result = revoke_view_access(
+
+            evidence_id,
+
+            user_address
+        )
+
+        return jsonify({
+
+            "status": "success",
+
+            "message": (
+                "View access revoked "
+                "successfully."
             ),
 
-            "from": (
+            "evidenceId": evidence_id,
+
+            "userAddress": user_address,
+
+            "action": "VIEW_REVOKED",
+
+            "transactionHash": (
                 blockchain_result[
-                    "from"
+                    "transactionHash"
                 ]
             ),
 
-            "to": (
+            "blockNumber": (
                 blockchain_result[
-                    "to"
+                    "blockNumber"
                 ]
             )
+
+        })
+
+    except Exception as error:
+
+        return jsonify({
+
+            "status": "error",
+
+            "message": str(error)
+
+        }), 500
+
+
+# ============================================================
+# GRANT DOWNLOAD ACCESS
+# ============================================================
+
+@app.route(
+    "/api/evidence/<evidence_id>/download-access/grant",
+    methods=["POST"]
+)
+def grant_download_access_route(evidence_id):
+
+    try:
+
+        data = request.get_json()
+
+        user_address = get_request_address(
+            data
+        )
+
+        if not user_address:
+
+            return jsonify({
+
+                "status": "error",
+
+                "message": (
+                    "User blockchain address "
+                    "is required."
+                )
+            }), 400
+
+        blockchain_result = grant_download_access(
+
+            evidence_id,
+
+            user_address
+        )
+
+        return jsonify({
+
+            "status": "success",
+
+            "message": (
+                "Download access granted "
+                "successfully."
+            ),
+
+            "evidenceId": evidence_id,
+
+            "userAddress": user_address,
+
+            "action": "DOWNLOAD_GRANTED",
+
+            "transactionHash": (
+                blockchain_result[
+                    "transactionHash"
+                ]
+            ),
+
+            "blockNumber": (
+                blockchain_result[
+                    "blockNumber"
+                ]
+            )
+
+        })
+
+    except Exception as error:
+
+        return jsonify({
+
+            "status": "error",
+
+            "message": str(error)
+
+        }), 500
+
+
+# ============================================================
+# REVOKE DOWNLOAD ACCESS
+# ============================================================
+
+@app.route(
+    "/api/evidence/<evidence_id>/download-access/revoke",
+    methods=["POST"]
+)
+def revoke_download_access_route(evidence_id):
+
+    try:
+
+        data = request.get_json()
+
+        user_address = get_request_address(
+            data
+        )
+
+        if not user_address:
+
+            return jsonify({
+
+                "status": "error",
+
+                "message": (
+                    "User blockchain address "
+                    "is required."
+                )
+            }), 400
+
+        blockchain_result = revoke_download_access(
+
+            evidence_id,
+
+            user_address
+        )
+
+        return jsonify({
+
+            "status": "success",
+
+            "message": (
+                "Download access revoked "
+                "successfully."
+            ),
+
+            "evidenceId": evidence_id,
+
+            "userAddress": user_address,
+
+            "action": "DOWNLOAD_REVOKED",
+
+            "transactionHash": (
+                blockchain_result[
+                    "transactionHash"
+                ]
+            ),
+
+            "blockNumber": (
+                blockchain_result[
+                    "blockNumber"
+                ]
+            )
+
         })
 
     except Exception as error:
@@ -685,8 +1002,46 @@ def record_access_route(evidence_id):
 
     try:
 
+        data = request.get_json()
+
+        if not data:
+
+            return jsonify({
+
+                "status": "error",
+
+                "message": (
+                    "Request body is required."
+                )
+            }), 400
+
+        action = str(
+            data.get(
+                "action",
+                ""
+            )
+        ).strip().upper()
+
+        if action not in [
+            "VIEW",
+            "DOWNLOAD"
+        ]:
+
+            return jsonify({
+
+                "status": "error",
+
+                "message": (
+                    "Action must be VIEW "
+                    "or DOWNLOAD."
+                )
+            }), 400
+
         blockchain_result = record_access(
-            evidence_id
+
+            evidence_id,
+
+            action
         )
 
         return jsonify({
@@ -706,6 +1061,8 @@ def record_access_route(evidence_id):
                 ]
             ),
 
+            "action": action,
+
             "transactionHash": (
                 blockchain_result[
                     "transactionHash"
@@ -717,6 +1074,7 @@ def record_access_route(evidence_id):
                     "blockNumber"
                 ]
             )
+
         })
 
     except Exception as error:
@@ -755,45 +1113,6 @@ def access_history_route(evidence_id):
             "count": len(history),
 
             "accessHistory": history
-
-        })
-
-    except Exception as error:
-
-        return jsonify({
-
-            "status": "error",
-
-            "message": str(error)
-
-        }), 500
-
-
-# ============================================================
-# CUSTODY HISTORY
-# ============================================================
-
-@app.route(
-    "/api/evidence/<evidence_id>/custody-history",
-    methods=["GET"]
-)
-def custody_history_route(evidence_id):
-
-    try:
-
-        history = get_custody_history(
-            evidence_id
-        )
-
-        return jsonify({
-
-            "status": "success",
-
-            "evidenceId": evidence_id,
-
-            "count": len(history),
-
-            "custodyHistory": history
 
         })
 

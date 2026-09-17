@@ -5,12 +5,19 @@ import {
   registerEvidenceAPI,
   getEvidenceAPI,
   verifyEvidenceAPI,
-  transferCustodyAPI,
+
+  checkViewAccessAPI,
+  checkDownloadAccessAPI,
+
+  grantViewAccessAPI,
+  revokeViewAccessAPI,
+
+  grantDownloadAccessAPI,
+  revokeDownloadAccessAPI,
+
   recordAccessAPI,
   getAccessHistoryAPI,
-  getCustodyHistoryAPI,
 } from "./api";
-
 import "./App.css";
 
 
@@ -181,31 +188,34 @@ function App() {
   const [accessHistory, setAccessHistory] =
     useState([]);
 
-  const [custodyHistory, setCustodyHistory] =
-    useState([]);
-
 
   // ==========================================================
-  // CUSTODY
+  // ACCESS MANAGEMENT
   // ==========================================================
 
-  const [showCustody, setShowCustody] =
+  const [showAccessManagement, setShowAccessManagement] =
     useState(false);
 
-  const [custodyEvidenceId, setCustodyEvidenceId] =
+  const [accessEvidenceId, setAccessEvidenceId] =
     useState("");
 
-  const [newCustodian, setNewCustodian] =
+  const [accessUserAddress, setAccessUserAddress] =
     useState("");
 
-  const [custodyLoading, setCustodyLoading] =
+  const [accessLoading, setAccessLoading] =
     useState(false);
 
-  const [custodyResult, setCustodyResult] =
+  const [accessResult, setAccessResult] =
     useState(null);
 
-  const [custodyError, setCustodyError] =
+  const [accessError, setAccessError] =
     useState("");
+
+  const [viewAccessStatus, setViewAccessStatus] =
+    useState(null);
+
+  const [downloadAccessStatus, setDownloadAccessStatus] =
+    useState(null);
 
 
   // ==========================================================
@@ -496,7 +506,6 @@ function App() {
     }
   };
 
-
   // ==========================================================
   // GET EVIDENCE DETAILS
   // ==========================================================
@@ -506,7 +515,6 @@ function App() {
     setDetailsError("");
     setEvidenceDetails(null);
     setAccessHistory([]);
-    setCustodyHistory([]);
 
     if (!backendConnected) {
 
@@ -530,10 +538,11 @@ function App() {
 
       setDetailsLoading(true);
 
+      const evidenceId =
+        detailsEvidenceId.trim();
+
       const result =
-        await getEvidenceAPI(
-          detailsEvidenceId.trim()
-        );
+        await getEvidenceAPI(evidenceId);
 
       setEvidenceDetails({
         blockchain: result.evidence,
@@ -547,7 +556,7 @@ function App() {
       try {
 
         await recordAccessAPI(
-          detailsEvidenceId.trim()
+          evidenceId
         );
 
       } catch (accessError) {
@@ -556,6 +565,7 @@ function App() {
           "Could not record evidence access:",
           accessError
         );
+
       }
 
       // ------------------------------------------------------
@@ -566,7 +576,7 @@ function App() {
 
         const accessResult =
           await getAccessHistoryAPI(
-            detailsEvidenceId.trim()
+            evidenceId
           );
 
         setAccessHistory(
@@ -579,29 +589,7 @@ function App() {
           "Could not load access history:",
           accessError
         );
-      }
 
-      // ------------------------------------------------------
-      // LOAD CUSTODY HISTORY
-      // ------------------------------------------------------
-
-      try {
-
-        const custodyResult =
-          await getCustodyHistoryAPI(
-            detailsEvidenceId.trim()
-          );
-
-        setCustodyHistory(
-          custodyResult.custodyHistory || []
-        );
-
-      } catch (custodyError) {
-
-        console.warn(
-          "Could not load custody history:",
-          custodyError
-        );
       }
 
     } catch (error) {
@@ -624,36 +612,36 @@ function App() {
 
 
   // ==========================================================
-  // TRANSFER CUSTODY
+  // ACCESS MANAGEMENT
   // ==========================================================
 
-  const handleTransferCustody = async () => {
+  const handleCheckViewAccess = async () => {
 
-    setCustodyError("");
-    setCustodyResult(null);
+    setAccessError("");
+    setAccessResult(null);
 
     if (!backendConnected) {
 
-      setCustodyError(
+      setAccessError(
         "Please connect to the EvidenceChain backend first."
       );
 
       return;
     }
 
-    if (!custodyEvidenceId.trim()) {
+    if (!accessEvidenceId.trim()) {
 
-      setCustodyError(
+      setAccessError(
         "Please enter an Evidence ID."
       );
 
       return;
     }
 
-    if (!newCustodian.trim()) {
+    if (!accessUserAddress.trim()) {
 
-      setCustodyError(
-        "Please enter the new custodian address."
+      setAccessError(
+        "Please enter a user Ethereum address."
       );
 
       return;
@@ -661,11 +649,11 @@ function App() {
 
     if (
       !isValidEthereumAddress(
-        newCustodian.trim()
+        accessUserAddress.trim()
       )
     ) {
 
-      setCustodyError(
+      setAccessError(
         "Please enter a valid Ethereum address."
       );
 
@@ -674,31 +662,232 @@ function App() {
 
     try {
 
-      setCustodyLoading(true);
+      setAccessLoading(true);
 
       const result =
-        await transferCustodyAPI(
-          custodyEvidenceId.trim(),
-          newCustodian.trim()
+        await checkViewAccessAPI(
+          accessEvidenceId.trim(),
+          accessUserAddress.trim()
         );
 
-      setCustodyResult(result);
+      setAccessResult({
+        type: "VIEW",
+        result
+      });
 
     } catch (error) {
 
       console.error(
-        "Custody transfer error:",
+        "View access check error:",
         error
       );
 
-      setCustodyError(
+      setAccessError(
         error?.message ||
-        "Custody transfer failed."
+        "Could not check view access."
       );
 
     } finally {
 
-      setCustodyLoading(false);
+      setAccessLoading(false);
+    }
+  };
+
+
+  const handleCheckDownloadAccess = async () => {
+
+    setAccessError("");
+    setAccessResult(null);
+
+    if (!backendConnected) {
+
+      setAccessError(
+        "Please connect to the EvidenceChain backend first."
+      );
+
+      return;
+    }
+
+    if (!accessEvidenceId.trim()) {
+
+      setAccessError(
+        "Please enter an Evidence ID."
+      );
+
+      return;
+    }
+
+    if (!accessUserAddress.trim()) {
+
+      setAccessError(
+        "Please enter a user Ethereum address."
+      );
+
+      return;
+    }
+
+    if (
+      !isValidEthereumAddress(
+        accessUserAddress.trim()
+      )
+    ) {
+
+      setAccessError(
+        "Please enter a valid Ethereum address."
+      );
+
+      return;
+    }
+
+    try {
+
+      setAccessLoading(true);
+
+      const result =
+        await checkDownloadAccessAPI(
+          accessEvidenceId.trim(),
+          accessUserAddress.trim()
+        );
+
+      setAccessResult({
+        type: "DOWNLOAD",
+        result
+      });
+
+    } catch (error) {
+
+      console.error(
+        "Download access check error:",
+        error
+      );
+
+      setAccessError(
+        error?.message ||
+        "Could not check download access."
+      );
+
+    } finally {
+
+      setAccessLoading(false);
+    }
+  };
+
+
+  const handleGrantViewAccess = async () => {
+
+    await handleAccessAction(
+      grantViewAccessAPI,
+      "View access granted successfully."
+    );
+  };
+
+
+  const handleRevokeViewAccess = async () => {
+
+    await handleAccessAction(
+      revokeViewAccessAPI,
+      "View access revoked successfully."
+    );
+  };
+
+
+  const handleGrantDownloadAccess = async () => {
+
+    await handleAccessAction(
+      grantDownloadAccessAPI,
+      "Download access granted successfully."
+    );
+  };
+
+
+  const handleRevokeDownloadAccess = async () => {
+
+    await handleAccessAction(
+      revokeDownloadAccessAPI,
+      "Download access revoked successfully."
+    );
+  };
+
+
+  const handleAccessAction = async (
+    apiFunction,
+    successMessage
+  ) => {
+
+    setAccessError("");
+    setAccessResult(null);
+
+    if (!backendConnected) {
+
+      setAccessError(
+        "Please connect to the EvidenceChain backend first."
+      );
+
+      return;
+    }
+
+    if (!accessEvidenceId.trim()) {
+
+      setAccessError(
+        "Please enter an Evidence ID."
+      );
+
+      return;
+    }
+
+    if (!accessUserAddress.trim()) {
+
+      setAccessError(
+        "Please enter a user Ethereum address."
+      );
+
+      return;
+    }
+
+    if (
+      !isValidEthereumAddress(
+        accessUserAddress.trim()
+      )
+    ) {
+
+      setAccessError(
+        "Please enter a valid Ethereum address."
+      );
+
+      return;
+    }
+
+    try {
+
+      setAccessLoading(true);
+
+      const result =
+        await apiFunction(
+          accessEvidenceId.trim(),
+          accessUserAddress.trim()
+        );
+
+      setAccessResult({
+        type: "ACTION",
+        message: successMessage,
+        result
+      });
+
+    } catch (error) {
+
+      console.error(
+        "Access management error:",
+        error
+      );
+
+      setAccessError(
+        error?.message ||
+        "Access management operation failed."
+      );
+
+    } finally {
+
+      setAccessLoading(false);
     }
   };
 
@@ -712,9 +901,13 @@ function App() {
     setShowRegister(false);
     setShowVerify(false);
     setShowDetails(false);
-    setShowCustody(false);
+    setShowAccessManagement(false);
   };
 
+
+  // ==========================================================
+  // UI
+  // ==========================================================
 
   // ==========================================================
   // UI
@@ -1489,222 +1682,9 @@ function App() {
               </div>
 
             )}
-
-
-            {/* CUSTODY HISTORY */}
-
-            {evidenceDetails && (
-
-              <div className="history-section">
-
-                <h3>
-                  Custody History
-                </h3>
-
-                {custodyHistory.length === 0 ? (
-
-                  <p>
-                    No custody transfers recorded.
-                  </p>
-
-                ) : (
-
-                  custodyHistory.map(
-                    (record, index) => (
-
-                      <div
-                        className="history-item"
-                        key={index}
-                      >
-
-                        <strong>
-                          Transfer {index + 1}
-                        </strong>
-
-                        <span>
-                          From:{" "}
-                          {shortenAddress(
-                            record.from
-                          )}
-                        </span>
-
-                        <span>
-                          To:{" "}
-                          {shortenAddress(
-                            record.to
-                          )}
-                        </span>
-
-                        <span>
-                          Time:{" "}
-                          {formatTimestamp(
-                            record.timestamp
-                          )}
-                        </span>
-
-                      </div>
-
-                    )
-                  )
-
-                )}
-
-              </div>
-
-            )}
-
-          </section>
-
+            </section>
         )}
 
-
-        {/* ================================================== */}
-        {/* CUSTODY PANEL */}
-        {/* ================================================== */}
-
-        {showCustody && (
-
-          <section className="panel">
-
-            <button
-              className="close-button"
-              onClick={closePanels}
-            >
-              ×
-            </button>
-
-
-            <h2>
-              Transfer Evidence Custody
-            </h2>
-
-            <p>
-              Transfer custody of an evidence
-              record to another blockchain
-              address.
-            </p>
-
-
-            {/* EVIDENCE ID */}
-
-            <div className="form-group">
-
-              <label>
-                Evidence ID
-              </label>
-
-              <input
-                type="text"
-                placeholder="e.g. EVD-9FE5BD91"
-                value={custodyEvidenceId}
-                onChange={(e) =>
-                  setCustodyEvidenceId(
-                    e.target.value
-                  )
-                }
-              />
-
-            </div>
-
-
-            {/* NEW CUSTODIAN */}
-
-            <div className="form-group">
-
-              <label>
-                New Custodian Address
-              </label>
-
-              <input
-                type="text"
-                placeholder="0x..."
-                value={newCustodian}
-                onChange={(e) =>
-                  setNewCustodian(
-                    e.target.value
-                  )
-                }
-              />
-
-            </div>
-
-
-            {/* ERROR */}
-
-            {custodyError && (
-
-              <div className="error-box">
-
-                ✗ {custodyError}
-
-              </div>
-
-            )}
-
-
-            {/* SUCCESS */}
-
-            {custodyResult && (
-
-              <div className="success-box">
-
-                <h3>
-                  ✓ Custody Transferred
-                </h3>
-
-                <p>
-                  Evidence custody was
-                  transferred successfully.
-                </p>
-
-                <p>
-                  <strong>
-                    New Custodian:
-                  </strong>
-                  {" "}
-                  {custodyResult.newCustodian}
-                </p>
-
-                <p>
-                  <strong>
-                    Block:
-                  </strong>
-                  {" "}
-                  {custodyResult.blockNumber}
-                </p>
-
-                <p>
-                  <strong>
-                    Transaction:
-                  </strong>
-                </p>
-
-                <span>
-                  {custodyResult.transactionHash}
-                </span>
-
-              </div>
-
-            )}
-
-
-            {/* BUTTON */}
-
-            <button
-              className="primary-button"
-              onClick={handleTransferCustody}
-              disabled={custodyLoading}
-            >
-
-              {custodyLoading
-                ? "Transferring..."
-                : "Transfer Custody"}
-
-            </button>
-
-          </section>
-
-        )}
 
 
         {/* ================================================== */}
@@ -1812,39 +1792,36 @@ function App() {
 
           </div>
 
+{/* ACCESS MANAGEMENT */}
 
-          {/* CUSTODY */}
+<div className="card">
 
-          <div className="card">
+  <div className="card-icon">
+    🔐
+  </div>
 
-            <div className="card-icon">
-              🔄
-            </div>
+  <h2>
+    Access Management
+  </h2>
 
-            <h2>
-              Transfer Custody
-            </h2>
+  <p>
+    Manage view and download permissions
+    for authorized evidence users.
+  </p>
 
-            <p>
-              Transfer evidence custody and
-              maintain a transparent chain
-              of custody.
-            </p>
+  <button
+    className="primary-button"
+    onClick={() => {
 
-            <button
-              className="primary-button"
-              onClick={() => {
+      closePanels();
+      setShowAccessManagement(true);
 
-                closePanels();
-                setShowCustody(true);
+    }}
+  >
+    Manage Access
+  </button>
 
-              }}
-            >
-              Transfer Custody
-            </button>
-
-          </div>
-
+</div>
         </section>
 
       </main>

@@ -7,7 +7,7 @@ from web3 import Web3
 
 RPC_URL = "http://127.0.0.1:8545"
 
-CONTRACT_ADDRESS = "0xB7f8BC63BbcaD18155201308C8f3540b07f84F5e"
+CONTRACT_ADDRESS = "0x5FC8d32690cc91D4c39d9d3abcBD16989F875707"
 
 EXPECTED_CHAIN_ID = 31337
 
@@ -17,6 +17,11 @@ EXPECTED_CHAIN_ID = 31337
 # ============================================================
 
 CONTRACT_ABI = [
+
+    # --------------------------------------------------------
+    # REGISTER EVIDENCE
+    # --------------------------------------------------------
+
     {
         "inputs": [
             {
@@ -40,6 +45,10 @@ CONTRACT_ABI = [
         "stateMutability": "nonpayable",
         "type": "function"
     },
+
+    # --------------------------------------------------------
+    # GET EVIDENCE
+    # --------------------------------------------------------
 
     {
         "inputs": [
@@ -77,11 +86,6 @@ CONTRACT_ABI = [
                         "internalType": "uint256",
                         "name": "timestamp",
                         "type": "uint256"
-                    },
-                    {
-                        "internalType": "address",
-                        "name": "currentCustodian",
-                        "type": "address"
                     }
                 ],
                 "internalType": "struct EvidenceChain.Evidence",
@@ -92,6 +96,10 @@ CONTRACT_ABI = [
         "stateMutability": "view",
         "type": "function"
     },
+
+    # --------------------------------------------------------
+    # VERIFY EVIDENCE
+    # --------------------------------------------------------
 
     {
         "inputs": [
@@ -118,6 +126,10 @@ CONTRACT_ABI = [
         "type": "function"
     },
 
+    # --------------------------------------------------------
+    # VIEW ACCESS
+    # --------------------------------------------------------
+
     {
         "inputs": [
             {
@@ -127,13 +139,19 @@ CONTRACT_ABI = [
             },
             {
                 "internalType": "address",
-                "name": "_newCustodian",
+                "name": "_user",
                 "type": "address"
             }
         ],
-        "name": "transferCustody",
-        "outputs": [],
-        "stateMutability": "nonpayable",
+        "name": "viewAccess",
+        "outputs": [
+            {
+                "internalType": "bool",
+                "name": "",
+                "type": "bool"
+            }
+        ],
+        "stateMutability": "view",
         "type": "function"
     },
 
@@ -143,6 +161,186 @@ CONTRACT_ABI = [
                 "internalType": "string",
                 "name": "_evidenceId",
                 "type": "string"
+            },
+            {
+                "internalType": "address",
+                "name": "_user",
+                "type": "address"
+            }
+        ],
+        "name": "canView",
+        "outputs": [
+            {
+                "internalType": "bool",
+                "name": "",
+                "type": "bool"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+
+    # --------------------------------------------------------
+    # DOWNLOAD ACCESS
+    # --------------------------------------------------------
+
+    {
+        "inputs": [
+            {
+                "internalType": "string",
+                "name": "_evidenceId",
+                "type": "string"
+            },
+            {
+                "internalType": "address",
+                "name": "_user",
+                "type": "address"
+            }
+        ],
+        "name": "downloadAccess",
+        "outputs": [
+            {
+                "internalType": "bool",
+                "name": "",
+                "type": "bool"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+
+    {
+        "inputs": [
+            {
+                "internalType": "string",
+                "name": "_evidenceId",
+                "type": "string"
+            },
+            {
+                "internalType": "address",
+                "name": "_user",
+                "type": "address"
+            }
+        ],
+        "name": "canDownload",
+        "outputs": [
+            {
+                "internalType": "bool",
+                "name": "",
+                "type": "bool"
+            }
+        ],
+        "stateMutability": "view",
+        "type": "function"
+    },
+
+    # --------------------------------------------------------
+    # GRANT VIEW ACCESS
+    # --------------------------------------------------------
+
+    {
+        "inputs": [
+            {
+                "internalType": "string",
+                "name": "_evidenceId",
+                "type": "string"
+            },
+            {
+                "internalType": "address",
+                "name": "_user",
+                "type": "address"
+            }
+        ],
+        "name": "grantViewAccess",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+
+    # --------------------------------------------------------
+    # REVOKE VIEW ACCESS
+    # --------------------------------------------------------
+
+    {
+        "inputs": [
+            {
+                "internalType": "string",
+                "name": "_evidenceId",
+                "type": "string"
+            },
+            {
+                "internalType": "address",
+                "name": "_user",
+                "type": "address"
+            }
+        ],
+        "name": "revokeViewAccess",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+
+    # --------------------------------------------------------
+    # GRANT DOWNLOAD ACCESS
+    # --------------------------------------------------------
+
+    {
+        "inputs": [
+            {
+                "internalType": "string",
+                "name": "_evidenceId",
+                "type": "string"
+            },
+            {
+                "internalType": "address",
+                "name": "_user",
+                "type": "address"
+            }
+        ],
+        "name": "grantDownloadAccess",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+
+    # --------------------------------------------------------
+    # REVOKE DOWNLOAD ACCESS
+    # --------------------------------------------------------
+
+    {
+        "inputs": [
+            {
+                "internalType": "string",
+                "name": "_evidenceId",
+                "type": "string"
+            },
+            {
+                "internalType": "address",
+                "name": "_user",
+                "type": "address"
+            }
+        ],
+        "name": "revokeDownloadAccess",
+        "outputs": [],
+        "stateMutability": "nonpayable",
+        "type": "function"
+    },
+
+    # --------------------------------------------------------
+    # RECORD ACCESS
+    # --------------------------------------------------------
+
+    {
+        "inputs": [
+            {
+                "internalType": "string",
+                "name": "_evidenceId",
+                "type": "string"
+            },
+            {
+                "internalType": "string",
+                "name": "_action",
+                "type": "string"
             }
         ],
         "name": "recordAccess",
@@ -150,6 +348,10 @@ CONTRACT_ABI = [
         "stateMutability": "nonpayable",
         "type": "function"
     },
+
+    # --------------------------------------------------------
+    # GET ACCESS HISTORY
+    # --------------------------------------------------------
 
     {
         "inputs": [
@@ -169,49 +371,17 @@ CONTRACT_ABI = [
                         "type": "address"
                     },
                     {
+                        "internalType": "string",
+                        "name": "action",
+                        "type": "string"
+                    },
+                    {
                         "internalType": "uint256",
                         "name": "timestamp",
                         "type": "uint256"
                     }
                 ],
                 "internalType": "struct EvidenceChain.AccessRecord[]",
-                "name": "",
-                "type": "tuple[]"
-            }
-        ],
-        "stateMutability": "view",
-        "type": "function"
-    },
-
-    {
-        "inputs": [
-            {
-                "internalType": "string",
-                "name": "_evidenceId",
-                "type": "string"
-            }
-        ],
-        "name": "getCustodyHistory",
-        "outputs": [
-            {
-                "components": [
-                    {
-                        "internalType": "address",
-                        "name": "from",
-                        "type": "address"
-                    },
-                    {
-                        "internalType": "address",
-                        "name": "to",
-                        "type": "address"
-                    },
-                    {
-                        "internalType": "uint256",
-                        "name": "timestamp",
-                        "type": "uint256"
-                    }
-                ],
-                "internalType": "struct EvidenceChain.CustodyTransfer[]",
                 "name": "",
                 "type": "tuple[]"
             }
@@ -236,7 +406,6 @@ def connect_to_blockchain():
     web3 = Web3(Web3.HTTPProvider(RPC_URL))
 
     if not web3.is_connected():
-
         raise ConnectionError(
             "Could not connect to Hardhat at "
             "http://127.0.0.1:8545"
@@ -249,17 +418,10 @@ def connect_to_blockchain():
     print("Chain ID:", chain_id)
 
     if chain_id != EXPECTED_CHAIN_ID:
-
         raise ConnectionError(
             f"Wrong blockchain network. "
             f"Expected chain ID {EXPECTED_CHAIN_ID}, "
             f"received {chain_id}"
-        )
-
-    if not Web3.is_address(CONTRACT_ADDRESS):
-
-        raise ValueError(
-            "Invalid EvidenceChain contract address."
         )
 
     checksum_address = Web3.to_checksum_address(
@@ -270,8 +432,7 @@ def connect_to_blockchain():
         checksum_address
     )
 
-    if contract_code == b"" or contract_code == b"0x":
-
+    if contract_code in (b"", b"0x"):
         raise ConnectionError(
             "No smart contract found at "
             f"{checksum_address}"
@@ -305,7 +466,6 @@ def register_evidence(
     accounts = web3.eth.accounts
 
     if len(accounts) == 0:
-
         raise ConnectionError(
             "No blockchain accounts available."
         )
@@ -348,8 +508,7 @@ def get_evidence(evidence_id):
         "caseId": result[1],
         "evidenceHash": result[2],
         "registeredBy": result[3],
-        "timestamp": str(result[4]),
-        "currentCustodian": result[5]
+        "timestamp": str(result[4])
     }
 
 
@@ -364,159 +523,89 @@ def verify_evidence(
 
     web3, contract = connect_to_blockchain()
 
-    result = contract.functions.verifyEvidence(
+    return contract.functions.verifyEvidence(
         str(evidence_id),
         str(current_hash)
     ).call()
 
-    return result
+
+# ============================================================
+# HELPER - VALIDATE ADDRESS
+# ============================================================
+
+def validate_address(address):
+
+    if not Web3.is_address(address):
+        raise ValueError(
+            "Invalid blockchain address."
+        )
+
+    return Web3.to_checksum_address(address)
 
 
 # ============================================================
-# TRANSFER EVIDENCE CUSTODY
+# CHECK VIEW ACCESS
 # ============================================================
 
-def transfer_custody(
+def can_view(
     evidence_id,
-    new_custodian
+    user_address
 ):
 
     web3, contract = connect_to_blockchain()
 
-    # --------------------------------------------------------
-    # VALIDATE NEW CUSTODIAN ADDRESS
-    # --------------------------------------------------------
+    user = validate_address(user_address)
 
-    if not Web3.is_address(new_custodian):
-
-        raise ValueError(
-            "Invalid blockchain custodian address."
-        )
-
-    checksum_custodian = Web3.to_checksum_address(
-        new_custodian
-    )
-
-    # --------------------------------------------------------
-    # GET AVAILABLE HARDHAT ACCOUNTS
-    # --------------------------------------------------------
-
-    accounts = web3.eth.accounts
-
-    if len(accounts) == 0:
-
-        raise ConnectionError(
-            "No blockchain accounts available."
-        )
-
-    # --------------------------------------------------------
-    # READ CURRENT CUSTODIAN FROM BLOCKCHAIN
-    # --------------------------------------------------------
-
-    evidence = contract.functions.getEvidence(
-        str(evidence_id)
+    return contract.functions.canView(
+        str(evidence_id),
+        user
     ).call()
 
-    current_custodian = Web3.to_checksum_address(
-        evidence[5]
-    )
-
-    # --------------------------------------------------------
-    # FIND THE CURRENT CUSTODIAN AMONG LOCAL ACCOUNTS
-    # --------------------------------------------------------
-
-    sender = None
-
-    for account in accounts:
-
-        if (
-            Web3.to_checksum_address(account)
-            == current_custodian
-        ):
-
-            sender = account
-
-            break
-
-    if sender is None:
-
-        raise PermissionError(
-            "The current custodian is not available "
-            "among the local blockchain accounts."
-        )
-
-    # --------------------------------------------------------
-    # PREVENT TRANSFER TO SAME ADDRESS
-    # --------------------------------------------------------
-
-    if (
-        Web3.to_checksum_address(sender)
-        == checksum_custodian
-    ):
-
-        raise ValueError(
-            "New custodian must be different "
-            "from the current custodian."
-        )
-
-    # --------------------------------------------------------
-    # TRANSFER CUSTODY ON BLOCKCHAIN
-    # --------------------------------------------------------
-
-    transaction_hash = contract.functions.transferCustody(
-        str(evidence_id),
-        checksum_custodian
-    ).transact({
-        "from": sender
-    })
-
-    # --------------------------------------------------------
-    # WAIT FOR BLOCKCHAIN CONFIRMATION
-    # --------------------------------------------------------
-
-    receipt = web3.eth.wait_for_transaction_receipt(
-        transaction_hash
-    )
-
-    # --------------------------------------------------------
-    # RETURN TRANSACTION INFORMATION
-    # --------------------------------------------------------
-
-    return {
-
-        "transactionHash":
-            transaction_hash.hex(),
-
-        "blockNumber":
-            receipt["blockNumber"],
-
-        "from":
-            Web3.to_checksum_address(sender),
-
-        "to":
-            checksum_custodian
-    }
 
 # ============================================================
-# RECORD EVIDENCE ACCESS
+# CHECK DOWNLOAD ACCESS
 # ============================================================
 
-def record_access(evidence_id):
+def can_download(
+    evidence_id,
+    user_address
+):
 
     web3, contract = connect_to_blockchain()
 
+    user = validate_address(user_address)
+
+    return contract.functions.canDownload(
+        str(evidence_id),
+        user
+    ).call()
+
+
+# ============================================================
+# GRANT VIEW ACCESS
+# ============================================================
+
+def grant_view_access(
+    evidence_id,
+    user_address
+):
+
+    web3, contract = connect_to_blockchain()
+
+    user = validate_address(user_address)
+
     accounts = web3.eth.accounts
 
     if len(accounts) == 0:
-
         raise ConnectionError(
             "No blockchain accounts available."
         )
 
     sender = accounts[0]
 
-    transaction_hash = contract.functions.recordAccess(
-        str(evidence_id)
+    transaction_hash = contract.functions.grantViewAccess(
+        str(evidence_id),
+        user
     ).transact({
         "from": sender
     })
@@ -528,7 +617,177 @@ def record_access(evidence_id):
     return {
         "transactionHash": transaction_hash.hex(),
         "blockNumber": receipt["blockNumber"],
-        "accessedBy": sender
+        "user": user,
+        "action": "VIEW_GRANTED"
+    }
+
+
+# ============================================================
+# REVOKE VIEW ACCESS
+# ============================================================
+
+def revoke_view_access(
+    evidence_id,
+    user_address
+):
+
+    web3, contract = connect_to_blockchain()
+
+    user = validate_address(user_address)
+
+    accounts = web3.eth.accounts
+
+    if len(accounts) == 0:
+        raise ConnectionError(
+            "No blockchain accounts available."
+        )
+
+    sender = accounts[0]
+
+    transaction_hash = contract.functions.revokeViewAccess(
+        str(evidence_id),
+        user
+    ).transact({
+        "from": sender
+    })
+
+    receipt = web3.eth.wait_for_transaction_receipt(
+        transaction_hash
+    )
+
+    return {
+        "transactionHash": transaction_hash.hex(),
+        "blockNumber": receipt["blockNumber"],
+        "user": user,
+        "action": "VIEW_REVOKED"
+    }
+
+
+# ============================================================
+# GRANT DOWNLOAD ACCESS
+# ============================================================
+
+def grant_download_access(
+    evidence_id,
+    user_address
+):
+
+    web3, contract = connect_to_blockchain()
+
+    user = validate_address(user_address)
+
+    accounts = web3.eth.accounts
+
+    if len(accounts) == 0:
+        raise ConnectionError(
+            "No blockchain accounts available."
+        )
+
+    sender = accounts[0]
+
+    transaction_hash = contract.functions.grantDownloadAccess(
+        str(evidence_id),
+        user
+    ).transact({
+        "from": sender
+    })
+
+    receipt = web3.eth.wait_for_transaction_receipt(
+        transaction_hash
+    )
+
+    return {
+        "transactionHash": transaction_hash.hex(),
+        "blockNumber": receipt["blockNumber"],
+        "user": user,
+        "action": "DOWNLOAD_GRANTED"
+    }
+
+
+# ============================================================
+# REVOKE DOWNLOAD ACCESS
+# ============================================================
+
+def revoke_download_access(
+    evidence_id,
+    user_address
+):
+
+    web3, contract = connect_to_blockchain()
+
+    user = validate_address(user_address)
+
+    accounts = web3.eth.accounts
+
+    if len(accounts) == 0:
+        raise ConnectionError(
+            "No blockchain accounts available."
+        )
+
+    sender = accounts[0]
+
+    transaction_hash = contract.functions.revokeDownloadAccess(
+        str(evidence_id),
+        user
+    ).transact({
+        "from": sender
+    })
+
+    receipt = web3.eth.wait_for_transaction_receipt(
+        transaction_hash
+    )
+
+    return {
+        "transactionHash": transaction_hash.hex(),
+        "blockNumber": receipt["blockNumber"],
+        "user": user,
+        "action": "DOWNLOAD_REVOKED"
+    }
+
+
+# ============================================================
+# RECORD EVIDENCE ACCESS
+# ============================================================
+
+def record_access(
+    evidence_id,
+    action
+):
+
+    web3, contract = connect_to_blockchain()
+
+    accounts = web3.eth.accounts
+
+    if len(accounts) == 0:
+        raise ConnectionError(
+            "No blockchain accounts available."
+        )
+
+    sender = accounts[0]
+
+    action = str(action).upper()
+
+    if action not in ["VIEW", "DOWNLOAD"]:
+        raise ValueError(
+            "Action must be VIEW or DOWNLOAD."
+        )
+
+    transaction_hash = contract.functions.recordAccess(
+        str(evidence_id),
+        action
+    ).transact({
+        "from": sender
+    })
+
+    receipt = web3.eth.wait_for_transaction_receipt(
+        transaction_hash
+    )
+
+    return {
+        "transactionHash": transaction_hash.hex(),
+        "blockNumber": receipt["blockNumber"],
+        "accessedBy": sender,
+        "action": action
     }
 
 
@@ -550,31 +809,7 @@ def get_access_history(evidence_id):
 
         history.append({
             "accessedBy": record[0],
-            "timestamp": str(record[1])
-        })
-
-    return history
-
-
-# ============================================================
-# GET CUSTODY HISTORY
-# ============================================================
-
-def get_custody_history(evidence_id):
-
-    web3, contract = connect_to_blockchain()
-
-    result = contract.functions.getCustodyHistory(
-        str(evidence_id)
-    ).call()
-
-    history = []
-
-    for record in result:
-
-        history.append({
-            "from": record[0],
-            "to": record[1],
+            "action": record[1],
             "timestamp": str(record[2])
         })
 
@@ -593,34 +828,8 @@ if __name__ == "__main__":
 
     try:
 
-        test_id = "EVD-DB550B68"
-
         print("Testing blockchain connection...")
         connect_to_blockchain()
-
-        print()
-        print("Testing evidence lookup...")
-
-        evidence = get_evidence(test_id)
-
-        print("Evidence:")
-        print(evidence)
-
-        print()
-        print("Testing access history...")
-
-        access_history = get_access_history(test_id)
-
-        print("Access History:")
-        print(access_history)
-
-        print()
-        print("Testing custody history...")
-
-        custody_history = get_custody_history(test_id)
-
-        print("Custody History:")
-        print(custody_history)
 
         print()
         print("Blockchain integration test completed.")

@@ -1404,7 +1404,7 @@ function App() {
 
                       <span>
                         {
-                          evidenceDetails.metadata.fileName
+                          evidenceDetails.metadata.title
                         }
                       </span>
 

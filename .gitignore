@@ -33,3 +33,25 @@
 # macOS / R history
 .DS_Store
 .Rhistory
+
+# Python virtual environment
+/backend/venv/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Backend local databases
+/backend/*.db
+/backend/database/*.db
+
+# Uploaded evidence files
+/backend/uploads/
+
+# Local/test files
+/backend/cookies.txt
+/backend/test_*.txt
+/test_evidence_*.txt
+
+# Backup files
+/backend/*backup*

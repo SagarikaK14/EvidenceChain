@@ -1,16 +1,22 @@
 import { useState } from "react";
+
 import {
-  connectBlockchain,
-  registerEvidence,
-  getEvidence,
-  verifyEvidence,
-  transferCustody,
-} from "./blockchain";
+  checkBackendHealth,
+  registerEvidenceAPI,
+  getEvidenceAPI,
+  verifyEvidenceAPI,
+  transferCustodyAPI,
+  recordAccessAPI,
+  getAccessHistoryAPI,
+  getCustodyHistoryAPI,
+} from "./api";
+
 import "./App.css";
 
-// ==================================================
+
+// ============================================================
 // SHA-256 HASH
-// ==================================================
+// ============================================================
 
 async function calculateSHA256(file) {
   const buffer = await file.arrayBuffer();
@@ -28,45 +34,76 @@ async function calculateSHA256(file) {
     .map((byte) =>
       byte.toString(16).padStart(2, "0")
     )
-    .join("")
-    .toUpperCase();
+    .join("");
 }
 
-// ==================================================
+
+// ============================================================
 // SHORTEN ADDRESS
-// ==================================================
+// ============================================================
 
 function shortenAddress(address) {
-  if (!address) return "";
+  if (!address) {
+    return "";
+  }
 
   return `${address.slice(0, 8)}...${address.slice(-6)}`;
 }
 
-// ==================================================
+
+// ============================================================
 // VALIDATE ETHEREUM ADDRESS
-// ==================================================
+// ============================================================
 
 function isValidEthereumAddress(address) {
-  return /^0x[a-fA-F0-9]{40}$/.test(address);
+  return /^0x[a-fA-F0-9]{40}$/.test(
+    address
+  );
 }
 
-// ==================================================
+
+// ============================================================
+// FORMAT BLOCKCHAIN TIMESTAMP
+// ============================================================
+
+function formatTimestamp(timestamp) {
+  if (!timestamp) {
+    return "N/A";
+  }
+
+  const numericTimestamp =
+    Number(timestamp);
+
+  if (!Number.isFinite(numericTimestamp)) {
+    return timestamp;
+  }
+
+  return new Date(
+    numericTimestamp * 1000
+  ).toLocaleString();
+}
+
+
+// ============================================================
 // APP
-// ==================================================
+// ============================================================
 
 function App() {
 
-  // =================================================
-  // BLOCKCHAIN
-  // =================================================
+  // ==========================================================
+  // BACKEND CONNECTION
+  // ==========================================================
 
-  const [blockchain, setBlockchain] = useState(null);
+  const [backendConnected, setBackendConnected] =
+    useState(false);
+
   const [connectionError, setConnectionError] =
     useState("");
 
-  // =================================================
+
+  // ==========================================================
   // REGISTER
-  // =================================================
+  // ==========================================================
 
   const [showRegister, setShowRegister] =
     useState(false);
@@ -74,7 +111,7 @@ function App() {
   const [registerCaseId, setRegisterCaseId] =
     useState("");
 
-  const [registerEvidenceId, setRegisterEvidenceId] =
+  const [registerDescription, setRegisterDescription] =
     useState("");
 
   const [registerFile, setRegisterFile] =
@@ -92,9 +129,10 @@ function App() {
   const [registerError, setRegisterError] =
     useState("");
 
-  // =================================================
+
+  // ==========================================================
   // VERIFY
-  // =================================================
+  // ==========================================================
 
   const [showVerify, setShowVerify] =
     useState(false);
@@ -120,9 +158,10 @@ function App() {
   const [verifyError, setVerifyError] =
     useState("");
 
-  // =================================================
+
+  // ==========================================================
   // DETAILS
-  // =================================================
+  // ==========================================================
 
   const [showDetails, setShowDetails] =
     useState(false);
@@ -139,9 +178,16 @@ function App() {
   const [detailsError, setDetailsError] =
     useState("");
 
-  // =================================================
+  const [accessHistory, setAccessHistory] =
+    useState([]);
+
+  const [custodyHistory, setCustodyHistory] =
+    useState([]);
+
+
+  // ==========================================================
   // CUSTODY
-  // =================================================
+  // ==========================================================
 
   const [showCustody, setShowCustody] =
     useState(false);
@@ -161,40 +207,50 @@ function App() {
   const [custodyError, setCustodyError] =
     useState("");
 
-  // =================================================
-  // CONNECT BLOCKCHAIN
-  // =================================================
+
+  // ==========================================================
+  // CONNECT BACKEND
+  // ==========================================================
 
   const handleConnect = async () => {
     try {
       setConnectionError("");
 
-      const connection =
-        await connectBlockchain();
+      const result =
+        await checkBackendHealth();
 
-      setBlockchain(connection);
+      if (result.status !== "ok") {
+        throw new Error(
+          "Backend health check failed."
+        );
+      }
+
+      setBackendConnected(true);
 
     } catch (error) {
       console.error(
-        "Blockchain connection error:",
+        "Backend connection error:",
         error
       );
 
+      setBackendConnected(false);
+
       setConnectionError(
-        error?.shortMessage ||
-        error?.reason ||
         error?.message ||
-        "Unable to connect to blockchain."
+        "Unable to connect to EvidenceChain backend."
       );
     }
   };
 
-  // =================================================
+
+  // ==========================================================
   // REGISTER FILE
-  // =================================================
+  // ==========================================================
 
   const handleRegisterFile = async (file) => {
+
     setRegisterFile(file);
+
     setRegisterResult(null);
     setRegisterError("");
 
@@ -204,13 +260,17 @@ function App() {
     }
 
     try {
+
       const hash =
         await calculateSHA256(file);
 
       setRegisterHash(hash);
 
     } catch (error) {
+
       console.error(error);
+
+      setRegisterHash("");
 
       setRegisterError(
         "Unable to calculate file hash."
@@ -218,40 +278,40 @@ function App() {
     }
   };
 
-  // =================================================
+
+  // ==========================================================
   // REGISTER EVIDENCE
-  // =================================================
+  // ==========================================================
 
   const handleRegister = async () => {
 
     setRegisterError("");
     setRegisterResult(null);
 
-    if (!blockchain) {
+    if (!backendConnected) {
+
       setRegisterError(
-        "Please connect to the blockchain first."
+        "Please connect to the EvidenceChain backend first."
       );
+
       return;
     }
 
     if (!registerCaseId.trim()) {
+
       setRegisterError(
         "Please enter a Case ID."
       );
-      return;
-    }
 
-    if (!registerEvidenceId.trim()) {
-      setRegisterError(
-        "Please enter an Evidence ID."
-      );
       return;
     }
 
     if (!registerFile) {
+
       setRegisterError(
         "Please select an evidence file."
       );
+
       return;
     }
 
@@ -266,18 +326,14 @@ function App() {
 
       setRegisterHash(hash);
 
-      const tx =
-        await registerEvidence(
-          blockchain.contract,
-          registerEvidenceId.trim(),
+      const result =
+        await registerEvidenceAPI(
+          registerFile,
           registerCaseId.trim(),
-          hash
+          registerDescription.trim()
         );
 
-      setRegisterResult({
-        success: true,
-        txHash: tx.hash,
-      });
+      setRegisterResult(result);
 
     } catch (error) {
 
@@ -287,8 +343,6 @@ function App() {
       );
 
       setRegisterError(
-        error?.reason ||
-        error?.shortMessage ||
         error?.message ||
         "Evidence registration failed."
       );
@@ -296,17 +350,18 @@ function App() {
     } finally {
 
       setRegisterLoading(false);
-
     }
   };
 
-  // =================================================
+
+  // ==========================================================
   // VERIFY FILE SELECTION
-  // =================================================
+  // ==========================================================
 
   const handleVerifyFile = async (file) => {
 
     setVerifyFile(file);
+
     setVerificationResult(null);
     setBlockchainHash("");
     setVerifyError("");
@@ -327,15 +382,18 @@ function App() {
 
       console.error(error);
 
+      setVerifyHash("");
+
       setVerifyError(
         "Unable to calculate file hash."
       );
     }
   };
 
-  // =================================================
+
+  // ==========================================================
   // VERIFY EVIDENCE
-  // =================================================
+  // ==========================================================
 
   const handleVerify = async () => {
 
@@ -343,36 +401,30 @@ function App() {
     setVerificationResult(null);
     setBlockchainHash("");
 
-    // ---------------------------------------------
-    // CHECK BLOCKCHAIN CONNECTION
-    // ---------------------------------------------
+    if (!backendConnected) {
 
-    if (!blockchain) {
       setVerifyError(
-        "Please connect to the blockchain first."
+        "Please connect to the EvidenceChain backend first."
       );
+
       return;
     }
 
-    // ---------------------------------------------
-    // CHECK EVIDENCE ID
-    // ---------------------------------------------
-
     if (!verifyEvidenceId.trim()) {
+
       setVerifyError(
         "Please enter an Evidence ID."
       );
+
       return;
     }
 
-    // ---------------------------------------------
-    // CHECK FILE
-    // ---------------------------------------------
-
     if (!verifyFile) {
+
       setVerifyError(
         "Please select an evidence file."
       );
+
       return;
     }
 
@@ -380,10 +432,9 @@ function App() {
 
       setVerifyLoading(true);
 
-      // -------------------------------------------
-      // STEP 1:
-      // Calculate SHA-256 of uploaded file
-      // -------------------------------------------
+      // ------------------------------------------------------
+      // STEP 1: CALCULATE CURRENT FILE HASH
+      // ------------------------------------------------------
 
       const currentHash =
         await calculateSHA256(
@@ -392,56 +443,39 @@ function App() {
 
       setVerifyHash(currentHash);
 
-      console.log(
-        "Current uploaded file hash:",
-        currentHash
-      );
+      // ------------------------------------------------------
+      // STEP 2: GET BLOCKCHAIN RECORD THROUGH BACKEND
+      // ------------------------------------------------------
 
-      // -------------------------------------------
-      // STEP 2:
-      // Retrieve evidence from blockchain
-      // -------------------------------------------
-
-      const evidence =
-        await getEvidence(
-          blockchain.contract,
+      const evidenceResponse =
+        await getEvidenceAPI(
           verifyEvidenceId.trim()
         );
 
+      const blockchainEvidence =
+        evidenceResponse.evidence;
+
       const storedHash =
-        evidence.evidenceHash.toUpperCase();
+        blockchainEvidence.evidenceHash;
 
       setBlockchainHash(storedHash);
 
-      console.log(
-        "Blockchain stored hash:",
-        storedHash
-      );
+      // ------------------------------------------------------
+      // STEP 3: ASK BACKEND TO VERIFY
+      // ------------------------------------------------------
 
-      // -------------------------------------------
-      // STEP 3:
-      // Ask the SMART CONTRACT to verify
-      // -------------------------------------------
-
-      const isAuthentic =
-        await verifyEvidence(
-          blockchain.contract,
+      const result =
+        await verifyEvidenceAPI(
           verifyEvidenceId.trim(),
           currentHash
         );
 
-      console.log(
-        "Smart contract verification:",
-        isAuthentic
-      );
-
-      // -------------------------------------------
-      // STEP 4:
-      // Display blockchain result
-      // -------------------------------------------
+      // ------------------------------------------------------
+      // STEP 4: DISPLAY RESULT
+      // ------------------------------------------------------
 
       setVerificationResult(
-        Boolean(isAuthentic)
+        Boolean(result.isAuthentic)
       );
 
     } catch (error) {
@@ -452,39 +486,43 @@ function App() {
       );
 
       setVerifyError(
-        error?.reason ||
-        error?.shortMessage ||
         error?.message ||
-        "Verification failed. Check the Evidence ID."
+        "Verification failed. Check the Evidence ID and file."
       );
 
     } finally {
 
       setVerifyLoading(false);
-
     }
   };
 
-  // =================================================
+
+  // ==========================================================
   // GET EVIDENCE DETAILS
-  // =================================================
+  // ==========================================================
 
   const handleGetDetails = async () => {
 
     setDetailsError("");
     setEvidenceDetails(null);
+    setAccessHistory([]);
+    setCustodyHistory([]);
 
-    if (!blockchain) {
+    if (!backendConnected) {
+
       setDetailsError(
-        "Please connect to the blockchain first."
+        "Please connect to the EvidenceChain backend first."
       );
+
       return;
     }
 
     if (!detailsEvidenceId.trim()) {
+
       setDetailsError(
         "Please enter an Evidence ID."
       );
+
       return;
     }
 
@@ -493,12 +531,78 @@ function App() {
       setDetailsLoading(true);
 
       const result =
-        await getEvidence(
-          blockchain.contract,
+        await getEvidenceAPI(
           detailsEvidenceId.trim()
         );
 
-      setEvidenceDetails(result);
+      setEvidenceDetails({
+        blockchain: result.evidence,
+        metadata: result.database,
+      });
+
+      // ------------------------------------------------------
+      // RECORD THAT THE EVIDENCE WAS ACCESSED
+      // ------------------------------------------------------
+
+      try {
+
+        await recordAccessAPI(
+          detailsEvidenceId.trim()
+        );
+
+      } catch (accessError) {
+
+        console.warn(
+          "Could not record evidence access:",
+          accessError
+        );
+      }
+
+      // ------------------------------------------------------
+      // LOAD ACCESS HISTORY
+      // ------------------------------------------------------
+
+      try {
+
+        const accessResult =
+          await getAccessHistoryAPI(
+            detailsEvidenceId.trim()
+          );
+
+        setAccessHistory(
+          accessResult.accessHistory || []
+        );
+
+      } catch (accessError) {
+
+        console.warn(
+          "Could not load access history:",
+          accessError
+        );
+      }
+
+      // ------------------------------------------------------
+      // LOAD CUSTODY HISTORY
+      // ------------------------------------------------------
+
+      try {
+
+        const custodyResult =
+          await getCustodyHistoryAPI(
+            detailsEvidenceId.trim()
+          );
+
+        setCustodyHistory(
+          custodyResult.custodyHistory || []
+        );
+
+      } catch (custodyError) {
+
+        console.warn(
+          "Could not load custody history:",
+          custodyError
+        );
+      }
 
     } catch (error) {
 
@@ -508,8 +612,6 @@ function App() {
       );
 
       setDetailsError(
-        error?.reason ||
-        error?.shortMessage ||
         error?.message ||
         "Evidence not found."
       );
@@ -517,37 +619,43 @@ function App() {
     } finally {
 
       setDetailsLoading(false);
-
     }
   };
 
-  // =================================================
+
+  // ==========================================================
   // TRANSFER CUSTODY
-  // =================================================
+  // ==========================================================
 
   const handleTransferCustody = async () => {
 
     setCustodyError("");
     setCustodyResult(null);
 
-    if (!blockchain) {
+    if (!backendConnected) {
+
       setCustodyError(
-        "Please connect to the blockchain first."
+        "Please connect to the EvidenceChain backend first."
       );
+
       return;
     }
 
     if (!custodyEvidenceId.trim()) {
+
       setCustodyError(
         "Please enter an Evidence ID."
       );
+
       return;
     }
 
     if (!newCustodian.trim()) {
+
       setCustodyError(
         "Please enter the new custodian address."
       );
+
       return;
     }
 
@@ -556,9 +664,11 @@ function App() {
         newCustodian.trim()
       )
     ) {
+
       setCustodyError(
         "Please enter a valid Ethereum address."
       );
+
       return;
     }
 
@@ -566,17 +676,13 @@ function App() {
 
       setCustodyLoading(true);
 
-      const tx =
-        await transferCustody(
-          blockchain.contract,
+      const result =
+        await transferCustodyAPI(
           custodyEvidenceId.trim(),
           newCustodian.trim()
         );
 
-      setCustodyResult({
-        success: true,
-        txHash: tx.hash,
-      });
+      setCustodyResult(result);
 
     } catch (error) {
 
@@ -586,8 +692,6 @@ function App() {
       );
 
       setCustodyError(
-        error?.reason ||
-        error?.shortMessage ||
         error?.message ||
         "Custody transfer failed."
       );
@@ -595,13 +699,13 @@ function App() {
     } finally {
 
       setCustodyLoading(false);
-
     }
   };
 
-  // =================================================
+
+  // ==========================================================
   // CLOSE PANELS
-  // =================================================
+  // ==========================================================
 
   const closePanels = () => {
 
@@ -609,19 +713,20 @@ function App() {
     setShowVerify(false);
     setShowDetails(false);
     setShowCustody(false);
-
   };
 
-  // =================================================
+
+  // ==========================================================
   // UI
-  // =================================================
+  // ==========================================================
 
   return (
+
     <div className="app">
 
-      {/* ============================================ */}
+      {/* ================================================== */}
       {/* HEADER */}
-      {/* ============================================ */}
+      {/* ================================================== */}
 
       <header className="header">
 
@@ -641,22 +746,26 @@ function App() {
           className="connect-button"
           onClick={handleConnect}
         >
-          {blockchain
-            ? "Blockchain Connected"
-            : "Connect Blockchain"}
+
+          {backendConnected
+            ? "Backend Connected"
+            : "Connect Backend"}
+
         </button>
 
       </header>
 
-      {/* ============================================ */}
+
+      {/* ================================================== */}
       {/* MAIN */}
-      {/* ============================================ */}
+      {/* ================================================== */}
 
       <main className="main">
 
-        {/* ========================================== */}
+
+        {/* ================================================== */}
         {/* HERO */}
-        {/* ========================================== */}
+        {/* ================================================== */}
 
         <section className="hero-section">
 
@@ -672,33 +781,35 @@ function App() {
 
         </section>
 
-        {/* ========================================== */}
-        {/* BLOCKCHAIN STATUS */}
-        {/* ========================================== */}
 
-        {blockchain && (
+        {/* ================================================== */}
+        {/* CONNECTION STATUS */}
+        {/* ================================================== */}
+
+        {backendConnected && (
 
           <div className="connection-status">
 
             <h3>
-              ● Blockchain Connected
+              ● EvidenceChain Backend Connected
             </h3>
 
             <p>
-              Account: {blockchain.address}
+              Flask API: http://127.0.0.1:5001
             </p>
 
             <p>
-              Chain ID: {blockchain.chainId}
+              Blockchain: Hardhat Local Network
             </p>
 
           </div>
 
         )}
 
-        {/* ========================================== */}
+
+        {/* ================================================== */}
         {/* CONNECTION ERROR */}
-        {/* ========================================== */}
+        {/* ================================================== */}
 
         {connectionError && (
 
@@ -710,9 +821,10 @@ function App() {
 
         )}
 
-        {/* ========================================== */}
+
+        {/* ================================================== */}
         {/* REGISTER PANEL */}
-        {/* ========================================== */}
+        {/* ================================================== */}
 
         {showRegister && (
 
@@ -725,14 +837,17 @@ function App() {
               ×
             </button>
 
+
             <h2>
               Register Digital Evidence
             </h2>
 
             <p>
-              Add evidence to the blockchain by
-              storing its cryptographic hash.
+              Upload evidence and permanently
+              record its SHA-256 hash on the
+              blockchain.
             </p>
+
 
             {/* CASE ID */}
 
@@ -744,7 +859,7 @@ function App() {
 
               <input
                 type="text"
-                placeholder="e.g. case002"
+                placeholder="e.g. CASE-004"
                 value={registerCaseId}
                 onChange={(e) =>
                   setRegisterCaseId(
@@ -755,26 +870,28 @@ function App() {
 
             </div>
 
-            {/* EVIDENCE ID */}
+
+            {/* DESCRIPTION */}
 
             <div className="form-group">
 
               <label>
-                Evidence ID
+                Description
               </label>
 
               <input
                 type="text"
-                placeholder="e.g. evidence002"
-                value={registerEvidenceId}
+                placeholder="Brief description of evidence"
+                value={registerDescription}
                 onChange={(e) =>
-                  setRegisterEvidenceId(
+                  setRegisterDescription(
                     e.target.value
                   )
                 }
               />
 
             </div>
+
 
             {/* FILE */}
 
@@ -795,6 +912,7 @@ function App() {
 
             </div>
 
+
             {/* HASH */}
 
             {registerHash && (
@@ -813,6 +931,69 @@ function App() {
 
             )}
 
+
+            {/* RESULT */}
+
+            {registerResult && (
+
+              <div className="success-box">
+
+                <h3>
+                  ✓ Evidence Registered
+                </h3>
+
+                <p>
+                  Evidence registered successfully
+                  on the blockchain.
+                </p>
+
+                <p>
+                  <strong>
+                    Evidence ID:
+                  </strong>
+                  {" "}
+                  {registerResult.evidenceId}
+                </p>
+
+                <p>
+                  <strong>
+                    Case ID:
+                  </strong>
+                  {" "}
+                  {registerResult.caseId}
+                </p>
+
+                <p>
+                  <strong>
+                    SHA-256:
+                  </strong>
+                  {" "}
+                  {registerResult.evidenceHash}
+                </p>
+
+                <p>
+                  <strong>
+                    Block:
+                  </strong>
+                  {" "}
+                  {registerResult.blockNumber}
+                </p>
+
+                <p>
+                  <strong>
+                    Transaction:
+                  </strong>
+                </p>
+
+                <span>
+                  {registerResult.transactionHash}
+                </span>
+
+              </div>
+
+            )}
+
+
             {/* ERROR */}
 
             {registerError && (
@@ -825,53 +1006,29 @@ function App() {
 
             )}
 
-            {/* SUCCESS */}
 
-            {registerResult && (
-
-              <div className="success-box">
-
-                <h3>
-                  ✓ Evidence Registered
-                </h3>
-
-                <p>
-                  Evidence registered
-                  successfully on the
-                  blockchain!
-                </p>
-
-                <p>
-                  Transaction:
-                </p>
-
-                <span>
-                  {registerResult.txHash}
-                </span>
-
-              </div>
-
-            )}
-
-            {/* REGISTER BUTTON */}
+            {/* BUTTON */}
 
             <button
               className="primary-button"
               onClick={handleRegister}
               disabled={registerLoading}
             >
+
               {registerLoading
                 ? "Registering..."
                 : "Register on Blockchain"}
+
             </button>
 
           </section>
 
         )}
 
-        {/* ========================================== */}
+
+        {/* ================================================== */}
         {/* VERIFY PANEL */}
-        {/* ========================================== */}
+        {/* ================================================== */}
 
         {showVerify && (
 
@@ -884,6 +1041,7 @@ function App() {
               ×
             </button>
 
+
             <h2>
               Verify Digital Evidence
             </h2>
@@ -893,6 +1051,7 @@ function App() {
               SHA-256 hash with the hash
               stored on the blockchain.
             </p>
+
 
             {/* EVIDENCE ID */}
 
@@ -904,7 +1063,7 @@ function App() {
 
               <input
                 type="text"
-                placeholder="e.g. evidence002"
+                placeholder="e.g. EVD-9FE5BD91"
                 value={verifyEvidenceId}
                 onChange={(e) => {
 
@@ -917,13 +1076,13 @@ function App() {
                   );
 
                   setBlockchainHash("");
-
                   setVerifyError("");
 
                 }}
               />
 
             </div>
+
 
             {/* FILE */}
 
@@ -944,6 +1103,7 @@ function App() {
 
             </div>
 
+
             {/* CURRENT FILE HASH */}
 
             {verifyHash && (
@@ -961,6 +1121,7 @@ function App() {
               </div>
 
             )}
+
 
             {/* BLOCKCHAIN HASH */}
 
@@ -980,6 +1141,7 @@ function App() {
 
             )}
 
+
             {/* ERROR */}
 
             {verifyError && (
@@ -991,6 +1153,7 @@ function App() {
               </div>
 
             )}
+
 
             {/* AUTHENTIC */}
 
@@ -1017,6 +1180,7 @@ function App() {
 
             )}
 
+
             {/* TAMPERED */}
 
             {verificationResult === false && (
@@ -1042,25 +1206,29 @@ function App() {
 
             )}
 
-            {/* VERIFY BUTTON */}
+
+            {/* BUTTON */}
 
             <button
               className="primary-button"
               onClick={handleVerify}
               disabled={verifyLoading}
             >
+
               {verifyLoading
                 ? "Verifying..."
                 : "Verify Against Blockchain"}
+
             </button>
 
           </section>
 
         )}
 
-        {/* ========================================== */}
+
+        {/* ================================================== */}
         {/* DETAILS PANEL */}
-        {/* ========================================== */}
+        {/* ================================================== */}
 
         {showDetails && (
 
@@ -1073,14 +1241,16 @@ function App() {
               ×
             </button>
 
+
             <h2>
               Evidence Details
             </h2>
 
             <p>
-              Retrieve evidence information
-              directly from the blockchain.
+              Retrieve evidence information,
+              custody history, and access history.
             </p>
+
 
             {/* EVIDENCE ID */}
 
@@ -1092,7 +1262,7 @@ function App() {
 
               <input
                 type="text"
-                placeholder="e.g. evidence002"
+                placeholder="e.g. EVD-9FE5BD91"
                 value={detailsEvidenceId}
                 onChange={(e) =>
                   setDetailsEvidenceId(
@@ -1102,6 +1272,7 @@ function App() {
               />
 
             </div>
+
 
             {/* ERROR */}
 
@@ -1115,6 +1286,7 @@ function App() {
 
             )}
 
+
             {/* BUTTON */}
 
             <button
@@ -1122,10 +1294,13 @@ function App() {
               onClick={handleGetDetails}
               disabled={detailsLoading}
             >
+
               {detailsLoading
                 ? "Loading..."
                 : "Get Evidence Details"}
+
             </button>
+
 
             {/* DETAILS */}
 
@@ -1140,10 +1315,11 @@ function App() {
                   </strong>
 
                   <span>
-                    {evidenceDetails.evidenceId}
+                    {evidenceDetails.blockchain.evidenceId}
                   </span>
 
                 </div>
+
 
                 <div>
 
@@ -1152,10 +1328,11 @@ function App() {
                   </strong>
 
                   <span>
-                    {evidenceDetails.caseId}
+                    {evidenceDetails.blockchain.caseId}
                   </span>
 
                 </div>
+
 
                 <div>
 
@@ -1164,10 +1341,11 @@ function App() {
                   </strong>
 
                   <span>
-                    {evidenceDetails.evidenceHash}
+                    {evidenceDetails.blockchain.evidenceHash}
                   </span>
 
                 </div>
+
 
                 <div>
 
@@ -1176,22 +1354,28 @@ function App() {
                   </strong>
 
                   <span>
-                    {evidenceDetails.registeredBy}
+                    {shortenAddress(
+                      evidenceDetails.blockchain.registeredBy
+                    )}
                   </span>
 
                 </div>
+
 
                 <div>
 
                   <strong>
-                    Timestamp
+                    Registered At
                   </strong>
 
                   <span>
-                    {evidenceDetails.timestamp}
+                    {formatTimestamp(
+                      evidenceDetails.blockchain.timestamp
+                    )}
                   </span>
 
                 </div>
+
 
                 <div>
 
@@ -1200,10 +1384,170 @@ function App() {
                   </strong>
 
                   <span>
-                    {evidenceDetails.currentCustodian}
+                    {shortenAddress(
+                      evidenceDetails.blockchain.currentCustodian
+                    )}
                   </span>
 
                 </div>
+
+
+                {evidenceDetails.metadata && (
+
+                  <>
+
+                    <div>
+
+                      <strong>
+                        File Name
+                      </strong>
+
+                      <span>
+                        {
+                          evidenceDetails.metadata.fileName
+                        }
+                      </span>
+
+                    </div>
+
+
+                    <div>
+
+                      <strong>
+                        Description
+                      </strong>
+
+                      <span>
+                        {
+                          evidenceDetails.metadata.description ||
+                          "N/A"
+                        }
+                      </span>
+
+                    </div>
+
+                  </>
+
+                )}
+
+              </div>
+
+            )}
+
+
+            {/* ACCESS HISTORY */}
+
+            {evidenceDetails && (
+
+              <div className="history-section">
+
+                <h3>
+                  Access History
+                </h3>
+
+                {accessHistory.length === 0 ? (
+
+                  <p>
+                    No access history recorded.
+                  </p>
+
+                ) : (
+
+                  accessHistory.map(
+                    (record, index) => (
+
+                      <div
+                        className="history-item"
+                        key={index}
+                      >
+
+                        <strong>
+                          Access {index + 1}
+                        </strong>
+
+                        <span>
+                          By:{" "}
+                          {shortenAddress(
+                            record.accessedBy
+                          )}
+                        </span>
+
+                        <span>
+                          Time:{" "}
+                          {formatTimestamp(
+                            record.timestamp
+                          )}
+                        </span>
+
+                      </div>
+
+                    )
+                  )
+
+                )}
+
+              </div>
+
+            )}
+
+
+            {/* CUSTODY HISTORY */}
+
+            {evidenceDetails && (
+
+              <div className="history-section">
+
+                <h3>
+                  Custody History
+                </h3>
+
+                {custodyHistory.length === 0 ? (
+
+                  <p>
+                    No custody transfers recorded.
+                  </p>
+
+                ) : (
+
+                  custodyHistory.map(
+                    (record, index) => (
+
+                      <div
+                        className="history-item"
+                        key={index}
+                      >
+
+                        <strong>
+                          Transfer {index + 1}
+                        </strong>
+
+                        <span>
+                          From:{" "}
+                          {shortenAddress(
+                            record.from
+                          )}
+                        </span>
+
+                        <span>
+                          To:{" "}
+                          {shortenAddress(
+                            record.to
+                          )}
+                        </span>
+
+                        <span>
+                          Time:{" "}
+                          {formatTimestamp(
+                            record.timestamp
+                          )}
+                        </span>
+
+                      </div>
+
+                    )
+                  )
+
+                )}
 
               </div>
 
@@ -1213,9 +1557,10 @@ function App() {
 
         )}
 
-        {/* ========================================== */}
+
+        {/* ================================================== */}
         {/* CUSTODY PANEL */}
-        {/* ========================================== */}
+        {/* ================================================== */}
 
         {showCustody && (
 
@@ -1228,6 +1573,7 @@ function App() {
               ×
             </button>
 
+
             <h2>
               Transfer Evidence Custody
             </h2>
@@ -1237,6 +1583,7 @@ function App() {
               record to another blockchain
               address.
             </p>
+
 
             {/* EVIDENCE ID */}
 
@@ -1248,7 +1595,7 @@ function App() {
 
               <input
                 type="text"
-                placeholder="e.g. evidence002"
+                placeholder="e.g. EVD-9FE5BD91"
                 value={custodyEvidenceId}
                 onChange={(e) =>
                   setCustodyEvidenceId(
@@ -1258,6 +1605,7 @@ function App() {
               />
 
             </div>
+
 
             {/* NEW CUSTODIAN */}
 
@@ -1280,6 +1628,7 @@ function App() {
 
             </div>
 
+
             {/* ERROR */}
 
             {custodyError && (
@@ -1291,6 +1640,7 @@ function App() {
               </div>
 
             )}
+
 
             {/* SUCCESS */}
 
@@ -1308,16 +1658,35 @@ function App() {
                 </p>
 
                 <p>
-                  Transaction:
+                  <strong>
+                    New Custodian:
+                  </strong>
+                  {" "}
+                  {custodyResult.newCustodian}
+                </p>
+
+                <p>
+                  <strong>
+                    Block:
+                  </strong>
+                  {" "}
+                  {custodyResult.blockNumber}
+                </p>
+
+                <p>
+                  <strong>
+                    Transaction:
+                  </strong>
                 </p>
 
                 <span>
-                  {custodyResult.txHash}
+                  {custodyResult.transactionHash}
                 </span>
 
               </div>
 
             )}
+
 
             {/* BUTTON */}
 
@@ -1326,20 +1695,24 @@ function App() {
               onClick={handleTransferCustody}
               disabled={custodyLoading}
             >
+
               {custodyLoading
                 ? "Transferring..."
                 : "Transfer Custody"}
+
             </button>
 
           </section>
 
         )}
 
-        {/* ========================================== */}
+
+        {/* ================================================== */}
         {/* FEATURE CARDS */}
-        {/* ========================================== */}
+        {/* ================================================== */}
 
         <section className="cards">
+
 
           {/* REGISTER */}
 
@@ -1364,7 +1737,6 @@ function App() {
               onClick={() => {
 
                 closePanels();
-
                 setShowRegister(true);
 
               }}
@@ -1373,6 +1745,7 @@ function App() {
             </button>
 
           </div>
+
 
           {/* VERIFY */}
 
@@ -1397,7 +1770,6 @@ function App() {
               onClick={() => {
 
                 closePanels();
-
                 setShowVerify(true);
 
               }}
@@ -1406,6 +1778,7 @@ function App() {
             </button>
 
           </div>
+
 
           {/* DETAILS */}
 
@@ -1421,8 +1794,8 @@ function App() {
 
             <p>
               View evidence metadata,
-              registration details, and
-              current custodian information.
+              registration details, custody
+              information, and access history.
             </p>
 
             <button
@@ -1430,7 +1803,6 @@ function App() {
               onClick={() => {
 
                 closePanels();
-
                 setShowDetails(true);
 
               }}
@@ -1439,6 +1811,7 @@ function App() {
             </button>
 
           </div>
+
 
           {/* CUSTODY */}
 
@@ -1463,7 +1836,6 @@ function App() {
               onClick={() => {
 
                 closePanels();
-
                 setShowCustody(true);
 
               }}
@@ -1480,5 +1852,6 @@ function App() {
     </div>
   );
 }
+
 
 export default App;

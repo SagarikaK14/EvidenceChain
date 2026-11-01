@@ -147,16 +147,36 @@ ARTIFACT_PATH = os.path.join(
     "EvidenceChain.json"
 )
 
-def get_contract_abi():
+def _resolve_artifact_path():
     if os.path.exists(ARTIFACT_PATH):
+        return ARTIFACT_PATH
+    alt_path = os.path.join(os.path.dirname(BASE_DIR), "contracts", "EvidenceChain.json")
+    if os.path.exists(alt_path):
+        return alt_path
+    return None
+
+def get_contract_abi():
+    target = _resolve_artifact_path()
+    if target and os.path.exists(target):
         try:
-            with open(ARTIFACT_PATH, "r") as f:
+            with open(target, "r") as f:
                 data = json.load(f)
                 if "abi" in data:
                     return data["abi"]
         except Exception as e:
             print("Warning: failed to load ABI from artifact:", e)
     return CONTRACT_ABI
+
+def get_contract_bytecode():
+    target = _resolve_artifact_path()
+    if target and os.path.exists(target):
+        try:
+            with open(target, "r") as f:
+                data = json.load(f)
+                return data.get("bytecode", "")
+        except Exception as e:
+            print("Warning: failed to load bytecode from artifact:", e)
+    return ""
 
 
 # ============================================================

@@ -37,7 +37,7 @@ from blockchain import (
 )
 from database.db import get_db, save_evidence
 
-UPLOADS_DIR = os.path.join(DEMO_ROOT, "demo_data", "uploads")
+UPLOADS_DIR = os.getenv("UPLOAD_FOLDER") or os.path.join(DEMO_ROOT, "demo_data", "uploads")
 os.makedirs(UPLOADS_DIR, exist_ok=True)
 
 # -------------------------------------------------------------

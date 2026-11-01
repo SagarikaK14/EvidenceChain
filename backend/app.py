@@ -1,6 +1,6 @@
 import os
 os.environ["OBJC_DISABLE_INITIALIZE_FORK_SAFETY"] = "YES"
-from flask import Flask, request, jsonify, send_file, session, current_app
+from flask import Flask, request, jsonify, send_file, send_from_directory, session, current_app
 from flask_cors import CORS
 import hashlib
 import uuid
@@ -123,7 +123,7 @@ def get_public_demo_origin():
             pass
 
     if origin:
-        if re.match(r"^https://[a-zA-Z0-9-]+\.trycloudflare\.com$", origin):
+        if re.match(r"^https://[a-zA-Z0-9.-]+(:\d+)?$", origin):
             return origin
         if re.match(r"^https?://(127\.0\.0\.1|localhost)(:\d+)?$", origin):
             return origin
@@ -173,14 +173,26 @@ def enforce_session_expiration_and_csrf():
         "localhost:5001",
         "127.0.0.1:5173",
         "localhost:5173",
+        "127.0.0.1:10000",
+        "localhost:10000",
+        "0.0.0.0:10000",
         "127.0.0.1",
         "localhost",
+        "0.0.0.0",
         "testserver",
         "localhost.localdomain"
     }
     server_name = app.config.get("SERVER_NAME")
     if server_name:
         allowed_hosts.add(server_name.lower())
+
+    render_host = os.getenv("RENDER_EXTERNAL_HOSTNAME")
+    if render_host:
+        allowed_hosts.add(render_host.lower().strip())
+
+    koyeb_host = os.getenv("KOYEB_PUBLIC_DOMAIN")
+    if koyeb_host:
+        allowed_hosts.add(koyeb_host.lower().strip())
 
     pub_origin = get_public_demo_origin()
     if pub_origin:
@@ -189,6 +201,17 @@ def enforce_session_expiration_and_csrf():
             allowed_hosts.add(parsed_pub.netloc.lower())
 
     host_without_port = host_header.split(":")[0]
+    if os.getenv("PUBLIC_DEMO_MODE", "").lower() in ("true", "1", "yes"):
+        if (
+            host_without_port.endswith(".onrender.com")
+            or host_without_port.endswith(".koyeb.app")
+            or host_without_port.endswith(".hf.space")
+            or host_without_port.endswith(".trycloudflare.com")
+            or host_without_port.endswith(".railway.app")
+        ):
+            allowed_hosts.add(host_header)
+            allowed_hosts.add(host_without_port)
+
     if host_header not in allowed_hosts and host_without_port not in allowed_hosts:
         return jsonify({
             "status": "error",
@@ -232,10 +255,26 @@ def enforce_session_expiration_and_csrf():
                 parsed_pub = urlparse(pub_origin)
                 pub_netloc = (parsed_pub.netloc or "").lower()
                 is_public_host = (host_header == pub_netloc or host_without_port == pub_netloc)
+            elif (
+                host_without_port.endswith(".onrender.com")
+                or host_without_port.endswith(".koyeb.app")
+                or host_without_port.endswith(".hf.space")
+                or host_without_port.endswith(".trycloudflare.com")
+                or host_without_port.endswith(".railway.app")
+                or (render_host and host_without_port == render_host.lower())
+            ):
+                is_public_host = True
 
             # Determine authorized origins specifically for this effective host
             if is_public_host:
-                host_allowed_origins = {pub_origin.rstrip("/").lower()}
+                host_allowed_origins = {
+                    f"https://{host_without_port}",
+                    f"https://{host_header}",
+                    f"http://{host_without_port}",
+                    f"http://{host_header}"
+                }
+                if pub_origin:
+                    host_allowed_origins.add(pub_origin.rstrip("/").lower())
             else:
                 host_allowed_origins = {
                     "http://localhost:5173",
@@ -245,7 +284,9 @@ def enforce_session_expiration_and_csrf():
                     "http://localhost:5101",
                     "http://127.0.0.1:5101",
                     "http://localhost:8080",
-                    "http://127.0.0.1:8080"
+                    "http://127.0.0.1:8080",
+                    "http://localhost:10000",
+                    "http://127.0.0.1:10000"
                 }
 
             if origin:
@@ -291,11 +332,22 @@ def is_cors_origin_allowed(origin):
         "http://localhost:5101",
         "http://127.0.0.1:5101",
         "http://localhost:8080",
-        "http://127.0.0.1:8080"
+        "http://127.0.0.1:8080",
+        "http://localhost:10000",
+        "http://127.0.0.1:10000"
     }
     pub = get_public_demo_origin()
     if pub:
         allowed.add(pub.rstrip("/").lower())
+    netloc = (parsed.netloc or "").lower().split(":")[0]
+    if (
+        netloc.endswith(".onrender.com")
+        or netloc.endswith(".koyeb.app")
+        or netloc.endswith(".hf.space")
+        or netloc.endswith(".trycloudflare.com")
+        or netloc.endswith(".railway.app")
+    ):
+        return True
     return normalized in allowed
 
 # Configure dynamic CORS origin validation with credentials support
@@ -3493,22 +3545,63 @@ def download_documentation_file(doc_id):
 
 
 # ============================================================
-# ROOT
+# HEALTHZ & STATIC SPA SERVING
 # ============================================================
 
-@app.route(
-    "/",
-    methods=["GET"]
-)
-def index():
-
+@app.route("/healthz", methods=["GET"])
+def healthz():
     return jsonify({
+        "status": "ok",
+        "service": "EvidenceChain Backend"
+    })
 
-        "service": (
-            "EvidenceChain Backend"
-        ),
 
+FRONTEND_DIST = os.environ.get(
+    "FRONTEND_DIST",
+    os.path.join(os.path.dirname(BASE_DIR), "frontend", "dist")
+)
+if not os.path.exists(FRONTEND_DIST):
+    alt_dist = os.path.join(BASE_DIR, "frontend", "dist")
+    if os.path.exists(alt_dist):
+        FRONTEND_DIST = alt_dist
+
+
+@app.route("/assets/<path:filename>", methods=["GET"])
+def serve_frontend_assets(filename):
+    if os.path.exists(FRONTEND_DIST):
+        assets_dir = os.path.join(FRONTEND_DIST, "assets")
+        if os.path.exists(os.path.join(assets_dir, filename)):
+            return send_from_directory(assets_dir, filename)
+    return jsonify({"error": "Asset not found"}), 404
+
+
+@app.route("/", methods=["GET"])
+def index():
+    if os.path.exists(FRONTEND_DIST):
+        index_file = os.path.join(FRONTEND_DIST, "index.html")
+        if os.path.isfile(index_file):
+            return send_from_directory(FRONTEND_DIST, "index.html")
+    return jsonify({
+        "service": "EvidenceChain Backend",
         "status": "running"
+    })
+
+
+@app.route("/<path:path>", methods=["GET"])
+def serve_spa(path):
+    if path.startswith("api/") or path.startswith("healthz"):
+        return jsonify({"error": "Endpoint not found"}), 404
+    if os.path.exists(FRONTEND_DIST):
+        target = os.path.join(FRONTEND_DIST, path)
+        if os.path.isfile(target):
+            return send_from_directory(FRONTEND_DIST, path)
+        index_file = os.path.join(FRONTEND_DIST, "index.html")
+        if os.path.isfile(index_file):
+            return send_from_directory(FRONTEND_DIST, "index.html")
+    return jsonify({
+        "service": "EvidenceChain Backend",
+        "status": "running",
+        "path": path
     })
 
 

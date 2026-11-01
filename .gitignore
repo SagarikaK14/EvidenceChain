@@ -1,57 +1,70 @@
-# Node modules
-/node_modules
+# ==============================================================================
+# EVIDENCECHAIN VERSION CONTROL EXCLUSIONS (.gitignore)
+# Strict security rules prohibiting binary bloat, credentials, and databases
+# ==============================================================================
 
-# Compilation output
-/dist
+# Node dependencies and compilation builds
+/node_modules/
+/frontend/node_modules/
+/dist/
+/frontend/dist/
+/bundle/
 
-# pnpm deploy output
-/bundle
+# Hardhat & Foundry compilation artifacts
+/artifacts/
+/cache/
+/types/
+/coverage/
+/.gas-snapshot/
+/snapshots/
+.anvil*
+*.state.json
+state.json
 
-# Hardhat Build Artifacts
-/artifacts
-
-# Hardhat compilation (v2) support directory
-/cache
-
-# Typechain output
-/types
-
-# Environment files
+# Environment configuration & credentials
 .env
 .env.*
 !.env.example
+*.pem
+*.key
+DEMO_CREDENTIALS.md
 
-# Hardhat coverage reports
-/coverage
-
-# Gas snapshot files
-/.gas-snapshot
-
-# Snapshot cheatcodes output
-/snapshots
-
-# macOS / R history
+# macOS & editor temp files
 .DS_Store
 .Rhistory
+*.swp
+*.swo
+*~
+.idea/
+.vscode/
 
-# Python virtual environment
+# Python runtime and virtual environments
 /backend/venv/
-
-# Python cache
+venv/
 __pycache__/
 *.py[cod]
+.pytest_cache/
 
-# Backend local databases
+# Databases & local state (Strictly prohibited from version control)
+*.db
+*.sqlite*
 /backend/*.db
 /backend/database/*.db
+/demo_data/
 
-# Uploaded evidence files
+# Uploaded evidence and local assets
 /backend/uploads/
+/uploads/
 
-# Local/test files
+# Screenshots, review packages, and binary archives
+/screenshots/
+*.tar.gz
+*.zip
+
+# Runtime logs, process identifiers, and local session caches
+*.log
+*.pid
 /backend/cookies.txt
 /backend/test_*.txt
 /test_evidence_*.txt
-
-# Backup files
-/backend/*backup*
+/backups/

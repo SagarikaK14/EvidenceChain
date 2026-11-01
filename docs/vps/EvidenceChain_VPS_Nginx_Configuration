@@ -1,0 +1,132 @@
+# ==============================================================================
+# EVIDENCECHAIN DEMO — NGINX REVERSE PROXY & TLS CONFIGURATION
+# Location: /etc/nginx/sites-available/evidencechain
+# ==============================================================================
+
+# Rate Limiting Zones
+# General API: 10 requests per second per IP
+limit_req_zone $binary_remote_addr zone=evidence_api_limit:10m rate=10r/s;
+
+# Strict Limit for Sensitive Auth & Upload Endpoints: 3 requests per second per IP
+limit_req_zone $binary_remote_addr zone=evidence_auth_limit:10m rate=3r/s;
+
+# ------------------------------------------------------------------------------
+# 1. HTTP INSECURE REDIRECT (PORT 80 -> HTTPS PORT 443)
+# ------------------------------------------------------------------------------
+server {
+    listen 80;
+    listen [::]:80;
+    server_name demo.evidencechain.org YOUR_SERVER_IP;
+
+    # Let's Encrypt ACME challenge location
+    location /.well-known/acme-challenge/ {
+        root /var/www/certbot;
+    }
+
+    # Redirect all HTTP requests to HTTPS
+    location / {
+        return 301 https://$host$request_uri;
+    }
+}
+
+# ------------------------------------------------------------------------------
+# 2. HTTPS SECURE APPLICATION SERVER (PORT 443)
+# ------------------------------------------------------------------------------
+server {
+    listen 443 ssl http2;
+    listen [::]:443 ssl http2;
+    server_name demo.evidencechain.org YOUR_SERVER_IP;
+
+    # TLS Certificates (Provided by Certbot or Self-Signed for IP)
+    ssl_certificate /etc/letsencrypt/live/demo.evidencechain.org/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/demo.evidencechain.org/privkey.pem;
+
+    # Modern TLS Security Parameters
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers on;
+    ssl_session_cache shared:SSL:10m;
+    ssl_session_timeout 1d;
+    ssl_session_tickets off;
+
+    # Security Headers
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+    add_header Strict-Transport-Security "max-age=31536000; includeSubDomains" always;
+
+    # Frontend Static Root (Compiled React/Vite SPA)
+    root /var/www/evidencechain;
+    index index.html;
+
+    # Maximum payload size for forensic evidence uploads
+    client_max_body_size 50M;
+
+    # --------------------------------------------------------------------------
+    # Frontend SPA Route Fallback (React Router)
+    # --------------------------------------------------------------------------
+    location / {
+        try_files $uri $uri/ /index.html;
+    }
+
+    # Cache static build assets
+    location /assets/ {
+        expires 1y;
+        add_header Cache-Control "public, immutable";
+    }
+
+    # --------------------------------------------------------------------------
+    # Sensitive Authentication & Registration Endpoints (Strict Rate Limiting)
+    # --------------------------------------------------------------------------
+    location /api/auth/ {
+        limit_req zone=evidence_auth_limit burst=5 nodelay;
+
+        proxy_pass http://127.0.0.1:5001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+    }
+
+    location /api/evidence/register {
+        limit_req zone=evidence_auth_limit burst=3 nodelay;
+
+        proxy_pass http://127.0.0.1:5001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 180s;
+    }
+
+    # --------------------------------------------------------------------------
+    # General API Reverse Proxy to Flask/Gunicorn
+    # --------------------------------------------------------------------------
+    location /api/ {
+        limit_req zone=evidence_api_limit burst=15 nodelay;
+
+        proxy_pass http://127.0.0.1:5001;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_read_timeout 120s;
+        proxy_connect_timeout 10s;
+    }
+
+    # --------------------------------------------------------------------------
+    # Deny Access to Hidden Files, SQLite Databases & Internal Git Folders
+    # --------------------------------------------------------------------------
+    location ~ /\. {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+
+    location ~* \.(db|sqlite|log|key|env)$ {
+        deny all;
+        access_log off;
+        log_not_found off;
+    }
+}

@@ -1,0 +1,43 @@
+# ==============================================================================
+# EVIDENCECHAIN CONSENSUS — PERSISTENT ANVIL BLOCKCHAIN SYSTEMD SERVICE
+# Location: /etc/systemd/system/evidencechain-anvil.service
+# ==============================================================================
+
+[Unit]
+Description=EvidenceChain Demonstration Consensus Ledger (Foundry Anvil)
+After=network.target
+
+[Service]
+Type=simple
+User=evidencechain
+Group=evidencechain
+WorkingDirectory=/var/lib/evidencechain
+
+# Foundry Anvil parameters:
+# - Strictly bound to loopback 127.0.0.1
+# - Port: 8545
+# - Chain ID: 31337
+# - State file: /var/lib/evidencechain/.anvil_demo_state.json
+# - Preserves historical states across reboots
+ExecStart=/home/evidencechain/.foundry/bin/anvil \
+    --host 127.0.0.1 \
+    --port 8545 \
+    --chain-id 31337 \
+    --state /var/lib/evidencechain/.anvil_demo_state.json \
+    --preserve-historical-states
+
+# Graceful State Flushing: Send SIGINT so Anvil dumps latest state to disk
+KillSignal=SIGINT
+TimeoutStopSec=30s
+FinalKillSignal=SIGKILL
+
+# Restart Policy
+Restart=always
+RestartSec=5s
+
+# Security Sandbox Restrictions
+NoNewPrivileges=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

@@ -1006,7 +1006,7 @@ def demo_login():
                 """, (
                     persona_info["name"],
                     resolved_email,
-                    generate_password_hash("DemoSecret2026!"),
+                    generate_password_hash(os.getenv("DEMO_USER_PASSWORD") or secrets.token_urlsafe(24)),
                     persona_info["role"],
                     persona_info["wallet_address"],
                     persona_info["employee_id"],

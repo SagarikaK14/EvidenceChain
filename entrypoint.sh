@@ -2,7 +2,10 @@
 set -e
 
 PORT="${PORT:-10000}"
-export DEMO_USER_PASSWORD="${DEMO_USER_PASSWORD:-Demo@12345}"
+if [ -z "$DEMO_USER_PASSWORD" ]; then
+    echo "[!] Notice: DEMO_USER_PASSWORD environment variable not set. Generating unique ephemeral session password..."
+    export DEMO_USER_PASSWORD=$(python3 -c "import secrets; print(secrets.token_urlsafe(24))")
+fi
 echo "=========================================================="
 echo " Starting EvidenceChain Public Cloud Production Container"
 echo " HTTP Port: $PORT | Chain ID: 31337 | Anvil Port: 8555"

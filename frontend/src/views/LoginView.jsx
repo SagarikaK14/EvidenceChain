@@ -480,9 +480,9 @@ export function LoginView({
                   lineHeight: 1.45,
                 }}
               >
-                <strong>Public Demonstration Access & Role Selection:</strong>
+                <strong>Temporary Synthetic Demonstration Environment:</strong>
                 <div style={{ marginTop: "4px" }}>
-                  Select an authorized synthetic demonstration persona below to evaluate EvidenceChain workflows across all organizational roles, including Head of Department (HOD) administrative authority. Operating on synthetic evidence on an isolated local development blockchain (Chain ID 31337). Dynamic MFA is bypassed for demonstration personas, with role-based permissions and audit logging fully active.
+                  This public deployment is an isolated evaluation demonstration operating on synthetic demo data, non-durable evidence uploads, and a container-local development blockchain (Foundry Anvil EVM Chain ID 31337). Select an authorized synthetic persona below to evaluate EvidenceChain workflows across all operational roles, including Head of Department (HOD) administrative authority. Dynamic MFA is bypassed for demonstration personas, with role-based permissions and cryptographic audit trails active.
                 </div>
               </div>
 

@@ -277,6 +277,26 @@ DISCOVERY_EXPORT:   Courtroom Certificate Generated`,
 
   return (
     <div className="landing-container">
+      {/* Top Demonstration Notice Banner */}
+      <div
+        style={{
+          backgroundColor: "#0B132B",
+          color: "#94A3B8",
+          fontSize: "12px",
+          padding: "7px 16px",
+          textAlign: "center",
+          borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
+          display: "flex",
+          justifyContent: "center",
+          alignItems: "center",
+          gap: "8px",
+          letterSpacing: "0.2px"
+        }}
+      >
+        <span style={{ display: "inline-block", width: "6px", height: "6px", borderRadius: "50%", backgroundColor: "#10B981" }} />
+        <span><strong>Public Demonstration Environment:</strong> Operating on synthetic evidence, non-durable uploads, and an isolated local development blockchain (Anvil EVM Chain ID 31337).</span>
+      </div>
+
       {/* ============================================================
           TOP NAVIGATION BAR
           ============================================================ */}

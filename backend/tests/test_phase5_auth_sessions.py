@@ -19,7 +19,7 @@ import json
 import time
 from app import app
 from database.db import get_db
-from tests.test_isolation_helper import setup_isolated_test_environment, teardown_isolated_test_environment
+from tests.test_isolation_helper import setup_isolated_test_environment, teardown_isolated_test_environment, TEST_DEMO_PASSWORD
 
 class TestPhase5AuthSessions(unittest.TestCase):
     @classmethod
@@ -41,7 +41,7 @@ class TestPhase5AuthSessions(unittest.TestCase):
         """Valid officer credentials must generate an MFA challenge token."""
         res = self.client.post("/api/auth/login", json={
             "email": "r.sharma@forensics.example.com",
-            "password": "EvidenceChain@Demo2026!"
+            "password": TEST_DEMO_PASSWORD
         })
         self.assertEqual(res.status_code, 200)
         data = res.get_json()
@@ -80,7 +80,7 @@ class TestPhase5AuthSessions(unittest.TestCase):
         """Correct MFA OTP completes login and returns authenticated session."""
         login_res = self.client.post("/api/auth/login", json={
             "email": "r.sharma@forensics.example.com",
-            "password": "EvidenceChain@Demo2026!"
+            "password": TEST_DEMO_PASSWORD
         })
         challenge_id = login_res.get_json()["challengeId"]
 
@@ -113,7 +113,7 @@ class TestPhase5AuthSessions(unittest.TestCase):
         """Incorrect MFA OTP must be rejected with 401."""
         login_res = self.client.post("/api/auth/login", json={
             "email": "r.sharma@forensics.example.com",
-            "password": "EvidenceChain@Demo2026!"
+            "password": TEST_DEMO_PASSWORD
         })
         challenge_id = login_res.get_json()["challengeId"]
 

@@ -22,7 +22,8 @@ from database.db import get_db
 class TestDemoAuthSecurity(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
-        from tests.test_isolation_helper import setup_isolated_test_environment
+        from tests.test_isolation_helper import setup_isolated_test_environment, TEST_DEMO_PASSWORD
+        cls.test_demo_password = TEST_DEMO_PASSWORD
         cls.temp_db = setup_isolated_test_environment(prefix="test_demo_auth_")
 
         # Record initial block on 8545 to guarantee zero pollution
@@ -142,7 +143,7 @@ class TestDemoAuthSecurity(unittest.TestCase):
         """Standard login endpoint must never return OTP challenges in response payload."""
         res = self.client.post("/api/auth/login", json={
             "email": "r.sen@forensics.example.com",
-            "password": "EvidenceChain@Demo2026!"
+            "password": self.test_demo_password
         })
         self.assertEqual(res.status_code, 200)
         data = res.get_json()
@@ -182,6 +183,18 @@ class TestDemoAuthSecurity(unittest.TestCase):
             self.assertFalse(p["email"].endswith("@metro-forensics.gov.example"))
         self.assertEqual(hod_count, 1)
         self.assertEqual(found_emails, expected_emails)
+
+    def test_08_seed_demo_users_fails_safely_when_unconfigured(self):
+        """seed_demo_users must fail safely and raise ValueError when DEMO_USER_PASSWORD is unset."""
+        from database.db import seed_demo_users
+        old_val = os.environ.pop("DEMO_USER_PASSWORD", None)
+        try:
+            with self.assertRaises(ValueError) as ctx:
+                seed_demo_users()
+            self.assertIn("DEMO_USER_PASSWORD must be explicitly configured", str(ctx.exception))
+        finally:
+            if old_val is not None:
+                os.environ["DEMO_USER_PASSWORD"] = old_val
 
 
 if __name__ == "__main__":

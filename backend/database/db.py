@@ -358,8 +358,6 @@ def init_db():
 # SEED DEMO USERS
 # ============================================================
 
-DEFAULT_DEMO_PASSWORD = os.getenv("DEMO_USER_PASSWORD", "EvidenceChain@Demo2026!")
-
 DEMO_USERS = [
     {
         "name": "Dr. Rajeshwar Sen",
@@ -413,12 +411,17 @@ def seed_demo_users(default_password=None):
     """
     Idempotently seed the 5 demo institutional employee accounts.
     Stores passwords hashed with Werkzeug (never plaintext).
-    The password is read from DEMO_USER_PASSWORD environment variable,
-    parameter, or defaults to a safe demonstration placeholder.
+    The password MUST be explicitly configured via default_password argument
+    or the DEMO_USER_PASSWORD environment variable. Fails safely if absent.
     """
     from werkzeug.security import generate_password_hash
 
-    pwd = default_password or os.getenv("DEMO_USER_PASSWORD", DEFAULT_DEMO_PASSWORD)
+    pwd = default_password or os.getenv("DEMO_USER_PASSWORD")
+    if not pwd:
+        raise ValueError(
+            "DEMO_USER_PASSWORD must be explicitly configured to seed demonstration accounts. "
+            "No hardcoded fallback password is permitted."
+        )
 
     connection = get_db()
     cursor = connection.cursor()

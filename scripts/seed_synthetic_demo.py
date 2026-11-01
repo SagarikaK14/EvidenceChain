@@ -80,11 +80,18 @@ def seed(database_path=None, upload_folder=None, rpc_url=None):
             os.environ.pop("DATABASE_PATH", None)
 
     # Seed Synthetic Users
+    demo_password = os.getenv("DEMO_USER_PASSWORD")
+    if not demo_password:
+        raise ValueError(
+            "DEMO_USER_PASSWORD environment variable must be explicitly configured to run seed_synthetic_demo. "
+            "No hardcoded fallback passwords are permitted."
+        )
+
     SYNTHETIC_USERS = [
         {
             "name": "Dr. Vikram Seth",
             "email": "v.seth@metro-forensics.gov.example",
-            "password": "Director@Demo2026!",
+            "password": demo_password,
             "role": "Head of Department",
             "employee_id": "HOD-9001",
             "department": "Forensics Executive Leadership",
@@ -94,7 +101,7 @@ def seed(database_path=None, upload_folder=None, rpc_url=None):
         {
             "name": "Arjun Mehta",
             "email": "a.mehta@metro-forensics.gov.example",
-            "password": "Officer@Demo2026!",
+            "password": demo_password,
             "role": "Senior Forensic Officer",
             "employee_id": "OFF-5012",
             "department": "Cyber Threat Forensics",
@@ -104,7 +111,7 @@ def seed(database_path=None, upload_folder=None, rpc_url=None):
         {
             "name": "Priya Nair",
             "email": "p.nair@metro-forensics.gov.example",
-            "password": "Investigator@Demo2026!",
+            "password": demo_password,
             "role": "Lead Cyber Investigator",
             "employee_id": "INV-7821",
             "department": "Major Crimes Investigation",
@@ -114,7 +121,7 @@ def seed(database_path=None, upload_folder=None, rpc_url=None):
         {
             "name": "Karan Rao",
             "email": "k.rao@metro-forensics.gov.example",
-            "password": "Analyst@Demo2026!",
+            "password": demo_password,
             "role": "Digital Forensics Analyst",
             "employee_id": "ANL-4096",
             "department": "Digital Evidence Review Board",
@@ -124,7 +131,7 @@ def seed(database_path=None, upload_folder=None, rpc_url=None):
         {
             "name": "Neha Verma",
             "email": "n.verma@metro-forensics.gov.example",
-            "password": "Legal@Demo2026!",
+            "password": demo_password,
             "role": "Special Legal Prosecutor",
             "employee_id": "LEG-1044",
             "department": "Cyber Prosecution Directorate",
@@ -134,7 +141,7 @@ def seed(database_path=None, upload_folder=None, rpc_url=None):
         {
             "name": "Devraj Singh",
             "email": "d.singh@metro-forensics.gov.example",
-            "password": "Custodian@Demo2026!",
+            "password": demo_password,
             "role": "Evidence Vault Custodian",
             "employee_id": "CUS-2088",
             "department": "Central Forensic Vault",

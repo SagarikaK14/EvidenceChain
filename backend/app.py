@@ -358,7 +358,10 @@ def handle_500(e):
 # Initialize database schema and seed demo accounts on startup
 try:
     init_db()
-    seed_demo_users()
+    if os.getenv("DEMO_USER_PASSWORD"):
+        seed_demo_users()
+    else:
+        print("[EvidenceChain Startup Notice] DEMO_USER_PASSWORD not configured. Demo personas remain unseeded until explicitly configured.")
 except Exception as _startup_err:
     print(f"[EvidenceChain Startup Notice] DB init: {_startup_err}")
 

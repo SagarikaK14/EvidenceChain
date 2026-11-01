@@ -20,14 +20,14 @@ The demonstration environment must present realistic evidence custody scenarios 
 
 All names, organizations, email addresses, and employee IDs are fictional demonstration identities:
 
-| Officer Name | Email Address | Role | Password | Wallet Address |
+| Officer Name | Email Address | Role | Password Configuration | Wallet Address |
 | :--- | :--- | :--- | :--- | :--- |
-| **Dr. Vikram Seth** | `v.seth@metro-forensics.gov.example` | Head of Department | `Director@Demo2026!` | `0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266` |
-| **Arjun Mehta** | `a.mehta@metro-forensics.gov.example` | Senior Forensic Officer | `Officer@Demo2026!` | `0x70997970C51812dc3A010C7d01b50e0d17dc79C8` |
-| **Priya Nair** | `p.nair@metro-forensics.gov.example` | Lead Cyber Investigator | `Investigator@Demo2026!` | `0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC` |
-| **Karan Rao** | `k.rao@metro-forensics.gov.example` | Digital Forensics Analyst | `Analyst@Demo2026!` | `0x90F79bf6EB2c4f870365E785982E1f101E93b906` |
-| **Neha Verma** | `n.verma@metro-forensics.gov.example` | Special Legal Prosecutor | `Legal@Demo2026!` | `0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65` |
-| **Devraj Singh** | `d.singh@metro-forensics.gov.example` | Evidence Vault Custodian | `Custodian@Demo2026!` | `0x9965507D1a55bcC2695C58ba16FB37d819B0A4df` |
+| **Dr. Vikram Seth** | `v.seth@metro-forensics.gov.example` | Head of Department | `DEMO_USER_PASSWORD` env var | `0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266` |
+| **Arjun Mehta** | `a.mehta@metro-forensics.gov.example` | Senior Forensic Officer | `DEMO_USER_PASSWORD` env var | `0x70997970C51812dc3A010C7d01b50e0d17dc79C8` |
+| **Priya Nair** | `p.nair@metro-forensics.gov.example` | Lead Cyber Investigator | `DEMO_USER_PASSWORD` env var | `0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC` |
+| **Karan Rao** | `k.rao@metro-forensics.gov.example` | Digital Forensics Analyst | `DEMO_USER_PASSWORD` env var | `0x90F79bf6EB2c4f870365E785982E1f101E93b906` |
+| **Neha Verma** | `n.verma@metro-forensics.gov.example` | Special Legal Prosecutor | `DEMO_USER_PASSWORD` env var | `0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65` |
+| **Devraj Singh** | `d.singh@metro-forensics.gov.example` | Evidence Vault Custodian | `DEMO_USER_PASSWORD` env var | `0x9965507D1a55bcC2695C58ba16FB37d819B0A4df` |
 
 ---
 
@@ -129,11 +129,15 @@ from database.db import init_db
 init_db()
 
 # Seed Synthetic Users
+demo_pwd = os.getenv("DEMO_USER_PASSWORD")
+if not demo_pwd:
+    raise ValueError("DEMO_USER_PASSWORD must be configured")
+
 SYNTHETIC_USERS = [
     {
         "name": "Dr. Vikram Seth",
         "email": "v.seth@metro-forensics.gov.example",
-        "password": "Director@Demo2026!",
+        "password": demo_pwd,
         "role": "Head of Department",
         "employee_id": "HOD-9001",
         "department": "Forensics Executive Leadership",
@@ -143,7 +147,7 @@ SYNTHETIC_USERS = [
     {
         "name": "Arjun Mehta",
         "email": "a.mehta@metro-forensics.gov.example",
-        "password": "Officer@Demo2026!",
+        "password": demo_pwd,
         "role": "Senior Forensic Officer",
         "employee_id": "OFF-5012",
         "department": "Cyber Threat Forensics",
@@ -153,7 +157,7 @@ SYNTHETIC_USERS = [
     {
         "name": "Priya Nair",
         "email": "p.nair@metro-forensics.gov.example",
-        "password": "Investigator@Demo2026!",
+        "password": demo_pwd,
         "role": "Lead Cyber Investigator",
         "employee_id": "INV-7821",
         "department": "Major Crimes Investigation",
@@ -163,7 +167,7 @@ SYNTHETIC_USERS = [
     {
         "name": "Karan Rao",
         "email": "k.rao@metro-forensics.gov.example",
-        "password": "Analyst@Demo2026!",
+        "password": demo_pwd,
         "role": "Digital Forensics Analyst",
         "employee_id": "ANL-4096",
         "department": "Digital Evidence Review Board",
@@ -173,7 +177,7 @@ SYNTHETIC_USERS = [
     {
         "name": "Neha Verma",
         "email": "n.verma@metro-forensics.gov.example",
-        "password": "Legal@Demo2026!",
+        "password": demo_pwd,
         "role": "Special Legal Prosecutor",
         "employee_id": "LEG-1044",
         "department": "Cyber Prosecution Directorate",
@@ -183,7 +187,7 @@ SYNTHETIC_USERS = [
     {
         "name": "Devraj Singh",
         "email": "d.singh@metro-forensics.gov.example",
-        "password": "Custodian@Demo2026!",
+        "password": demo_pwd,
         "role": "Evidence Vault Custodian",
         "employee_id": "CUS-2088",
         "department": "Central Forensic Vault",

@@ -13,6 +13,7 @@ import sqlite3
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 PROJECT_ROOT = os.path.dirname(BASE_DIR)
+TEST_DEMO_PASSWORD = os.getenv("DEMO_USER_PASSWORD", "EphemeralTest_Password_Only_2026!")
 BACKUP_DB = os.getenv(
     "TEST_BASELINE_DB",
     os.path.join(
@@ -53,11 +54,12 @@ def setup_isolated_test_environment(prefix="test_ec_"):
         init_db()
 
     os.environ["DATABASE_PATH"] = temp_path
+    os.environ["DEMO_USER_PASSWORD"] = TEST_DEMO_PASSWORD
     import sys
     if BASE_DIR not in sys.path:
         sys.path.insert(0, BASE_DIR)
     from database.db import seed_demo_users
-    seed_demo_users("EvidenceChain@Demo2026!")
+    seed_demo_users(TEST_DEMO_PASSWORD)
 
     os.environ["BLOCKCHAIN_RPC_URL"] = os.getenv("TEST_RPC_URL", "http://127.0.0.1:8546")
     os.environ["CONTRACT_ADDRESS"] = os.getenv("TEST_CONTRACT_ADDRESS", "0x5FbDB2315678afecb367f032d93F642f64180aa3")

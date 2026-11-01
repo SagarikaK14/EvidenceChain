@@ -1,0 +1,41 @@
+# ==============================================================================
+# EVIDENCECHAIN API — GUNICORN SYSTEMD SERVICE
+# Location: /etc/systemd/system/evidencechain-api.service
+# ==============================================================================
+
+[Unit]
+Description=EvidenceChain Digital Evidence Management Flask API (Gunicorn WSGI)
+After=network.target evidencechain-anvil.service
+Requires=evidencechain-anvil.service
+
+[Service]
+Type=simple
+User=evidencechain
+Group=evidencechain
+WorkingDirectory=/opt/evidencechain/backend
+EnvironmentFile=/opt/evidencechain/backend/.env
+
+# Gunicorn WSGI Execution: 4 workers, loopback 127.0.0.1:5001, 120s timeout
+ExecStart=/opt/evidencechain/backend/venv/bin/gunicorn \
+    --workers 4 \
+    --bind 127.0.0.1:5001 \
+    --timeout 120 \
+    --graceful-timeout 30 \
+    --keep-alive 5 \
+    --access-logfile /var/log/evidencechain/api_access.log \
+    --error-logfile /var/log/evidencechain/api_error.log \
+    --capture-output \
+    app:app
+
+# Restart Policy
+Restart=always
+RestartSec=5s
+
+# Security Sandbox Restrictions
+NoNewPrivileges=true
+ProtectSystem=full
+ProtectHome=true
+PrivateTmp=true
+
+[Install]
+WantedBy=multi-user.target

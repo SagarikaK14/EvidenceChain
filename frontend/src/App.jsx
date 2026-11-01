@@ -1,1834 +1,988 @@
-import { useState } from "react";
+// ============================================================
+// EvidenceChain Main Application Controller
+// Professional Institutional Redesign & Authentication Gate
+// ============================================================
 
+import { useState, useEffect, useCallback } from "react";
 import {
   checkBackendHealth,
+  getDiagnosticsSummaryAPI,
+  listEvidenceAPI,
   registerEvidenceAPI,
   getEvidenceAPI,
   verifyEvidenceAPI,
-
   checkViewAccessAPI,
   checkDownloadAccessAPI,
-
   grantViewAccessAPI,
   revokeViewAccessAPI,
-
   grantDownloadAccessAPI,
   revokeDownloadAccessAPI,
-
-  recordAccessAPI,
   getAccessHistoryAPI,
+  getMeAPI,
+  logoutAPI,
 } from "./api";
+
+import { Sidebar } from "./components/Sidebar";
+import { Header } from "./components/Header";
+import { LoginModal } from "./components/LoginModal";
+import { Toast } from "./components/Toast";
+
+import { LoginView } from "./views/LoginView";
+import { LandingPageView } from "./views/LandingPageView";
+import { DashboardView } from "./views/DashboardView";
+import { EvidenceListView } from "./views/EvidenceListView";
+import { RegisterEvidenceView } from "./views/RegisterEvidenceView";
+import { VerifyEvidenceView } from "./views/VerifyEvidenceView";
+import { EvidenceDetailsView } from "./views/EvidenceDetailsView";
+import { DepartmentAuthorityView } from "./views/DepartmentAuthorityView";
+import { AccessManagementView } from "./views/AccessManagementView";
+import { AccessHistoryView } from "./views/AccessHistoryView";
+import { IdentityProfileView } from "./views/IdentityProfileView";
+import { SystemStatusView } from "./views/SystemStatusView";
+
 import "./App.css";
 
-
-// ============================================================
-// SHA-256 HASH
-// ============================================================
-
-async function calculateSHA256(file) {
-  const buffer = await file.arrayBuffer();
-
-  const hashBuffer = await crypto.subtle.digest(
-    "SHA-256",
-    buffer
-  );
-
-  const hashArray = Array.from(
-    new Uint8Array(hashBuffer)
-  );
-
-  return hashArray
-    .map((byte) =>
-      byte.toString(16).padStart(2, "0")
-    )
-    .join("");
-}
-
-
-// ============================================================
-// SHORTEN ADDRESS
-// ============================================================
-
-function shortenAddress(address) {
-  if (!address) {
-    return "";
-  }
-
-  return `${address.slice(0, 8)}...${address.slice(-6)}`;
-}
-
-
-// ============================================================
-// VALIDATE ETHEREUM ADDRESS
-// ============================================================
-
-function isValidEthereumAddress(address) {
-  return /^0x[a-fA-F0-9]{40}$/.test(
-    address
-  );
-}
-
-
-// ============================================================
-// FORMAT BLOCKCHAIN TIMESTAMP
-// ============================================================
-
-function formatTimestamp(timestamp) {
-  if (!timestamp) {
-    return "N/A";
-  }
-
-  const numericTimestamp =
-    Number(timestamp);
-
-  if (!Number.isFinite(numericTimestamp)) {
-    return timestamp;
-  }
-
-  return new Date(
-    numericTimestamp * 1000
-  ).toLocaleString();
-}
-
-
-// ============================================================
-// APP
-// ============================================================
-
-function App() {
-
-  // ==========================================================
-  // BACKEND CONNECTION
-  // ==========================================================
-
-  const [backendConnected, setBackendConnected] =
-    useState(false);
-
-  const [connectionError, setConnectionError] =
-    useState("");
-
-
-  // ==========================================================
-  // REGISTER
-  // ==========================================================
-
-  const [showRegister, setShowRegister] =
-    useState(false);
-
-  const [registerCaseId, setRegisterCaseId] =
-    useState("");
-
-  const [registerDescription, setRegisterDescription] =
-    useState("");
-
-  const [registerFile, setRegisterFile] =
-    useState(null);
-
-  const [registerHash, setRegisterHash] =
-    useState("");
-
-  const [registerLoading, setRegisterLoading] =
-    useState(false);
-
-  const [registerResult, setRegisterResult] =
-    useState(null);
-
-  const [registerError, setRegisterError] =
-    useState("");
-
-
-  // ==========================================================
-  // VERIFY
-  // ==========================================================
-
-  const [showVerify, setShowVerify] =
-    useState(false);
-
-  const [verifyEvidenceId, setVerifyEvidenceId] =
-    useState("");
-
-  const [verifyFile, setVerifyFile] =
-    useState(null);
-
-  const [verifyHash, setVerifyHash] =
-    useState("");
-
-  const [verificationResult, setVerificationResult] =
-    useState(null);
-
-  const [blockchainHash, setBlockchainHash] =
-    useState("");
-
-  const [verifyLoading, setVerifyLoading] =
-    useState(false);
-
-  const [verifyError, setVerifyError] =
-    useState("");
-
-
-  // ==========================================================
-  // DETAILS
-  // ==========================================================
-
-  const [showDetails, setShowDetails] =
-    useState(false);
-
-  const [detailsEvidenceId, setDetailsEvidenceId] =
-    useState("");
-
-  const [evidenceDetails, setEvidenceDetails] =
-    useState(null);
-
-  const [detailsLoading, setDetailsLoading] =
-    useState(false);
-
-  const [detailsError, setDetailsError] =
-    useState("");
-
-  const [accessHistory, setAccessHistory] =
-    useState([]);
-
-
-  // ==========================================================
-  // ACCESS MANAGEMENT
-  // ==========================================================
-
-  const [showAccessManagement, setShowAccessManagement] =
-    useState(false);
-
-  const [accessEvidenceId, setAccessEvidenceId] =
-    useState("");
-
-  const [accessUserAddress, setAccessUserAddress] =
-    useState("");
-
-  const [accessLoading, setAccessLoading] =
-    useState(false);
-
-  const [accessResult, setAccessResult] =
-    useState(null);
-
-  const [accessError, setAccessError] =
-    useState("");
-
-  const [viewAccessStatus, setViewAccessStatus] =
-    useState(null);
-
-  const [downloadAccessStatus, setDownloadAccessStatus] =
-    useState(null);
-
-
-  // ==========================================================
-  // CONNECT BACKEND
-  // ==========================================================
-
-  const handleConnect = async () => {
+const API_BASE_URL =
+  import.meta.env.VITE_API_BASE_URL !== undefined
+    ? import.meta.env.VITE_API_BASE_URL
+    : typeof window !== "undefined" && window.location.hostname === "localhost"
+    ? "http://localhost:5001"
+    : "";
+
+// Default Forensic Officer Profile (Institutional Identity Model)
+const DEFAULT_OFFICER = {
+  name: "Rahul Sharma",
+  role: "Digital Forensics Officer",
+  employeeId: "OFF-1024",
+  department: "Cyber Crime Unit",
+  organization: "ABC Police Department",
+  email: "r.sharma@cybercrime.gov.in",
+  walletAddress: "0x70997970C51812dc3A010C7d01b50e0d17dc79C8",
+  identityStatus: "VERIFIED",
+  walletStatus: "REGISTERED",
+  mfaStatus: "ENABLED",
+};
+
+export default function App() {
+  // Authentication & Public Navigation Gate State
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [authChecking, setAuthChecking] = useState(true);
+  const [publicPage, setPublicPage] = useState("landing"); // "landing" | "login"
+
+  // Navigation & View State
+  const [activeView, setActiveView] = useState("dashboard");
+  const [searchQuery, setSearchQuery] = useState("");
+  const [isLoginModalOpen, setIsLoginModalOpen] = useState(false);
+
+  // Global Forensic Toast Notification State
+  const [toast, setToast] = useState(null);
+
+  const showToast = (message, type = "info", txHash = null, title = null) => {
+    setToast({ message, type, txHash, title });
+    setTimeout(() => {
+      setToast((prev) => (prev?.message === message ? null : prev));
+    }, 4500);
+  };
+
+  // Current Logged-in Officer Session
+  const [currentUser, setCurrentUser] = useState(DEFAULT_OFFICER);
+
+  // System Telemetry State
+  const [backendConnected, setBackendConnected] = useState(false);
+  const [blockchainConnected, setBlockchainConnected] = useState(false);
+
+  // Evidence Repository Data
+  const [evidenceList, setEvidenceList] = useState([]);
+
+  // Selected Evidence State (For Details & Actions)
+  const [selectedEvidenceId, setSelectedEvidenceId] = useState("");
+  const [evidenceDetails, setEvidenceDetails] = useState(null);
+  const [detailsLoading, setDetailsLoading] = useState(false);
+  const [detailsError, setDetailsError] = useState("");
+  const [detailsAccessHistory, setDetailsAccessHistory] = useState([]);
+
+  // File Viewing & Downloading in Details View
+  const [detailsViewAllowed, setDetailsViewAllowed] = useState(null);
+  const [detailsDownloadAllowed, setDetailsDownloadAllowed] = useState(null);
+  const [viewedFileUrl, setViewedFileUrl] = useState("");
+  const [viewedFileName, setViewedFileName] = useState("");
+
+  // Registration Flow State
+  const [registerLoading, setRegisterLoading] = useState(false);
+  const [registerError, setRegisterError] = useState("");
+  const [registerResult, setRegisterResult] = useState(null);
+
+  // Verification Flow State
+  const [verifyEvidenceId, setVerifyEvidenceId] = useState("");
+  const [verifyLoading, setVerifyLoading] = useState(false);
+  const [verifyError, setVerifyError] = useState("");
+  const [verificationResult, setVerificationResult] = useState(null);
+  const [verifyBlockchainHash, setVerifyBlockchainHash] = useState("");
+  const [verifyCurrentHash, setVerifyCurrentHash] = useState("");
+
+  // Access Management Flow State
+  const [accessViewStatus, setAccessViewStatus] = useState(null);
+  const [accessDownloadStatus, setAccessDownloadStatus] = useState(null);
+  const [accessActionResult, setAccessActionResult] = useState(null);
+  const [accessLoading, setAccessLoading] = useState(false);
+  const [accessError, setAccessError] = useState("");
+
+  // Access History View State
+  const [historyRecords, setHistoryRecords] = useState([]);
+  const [historyLoading, setHistoryLoading] = useState(false);
+  const [historyError, setHistoryError] = useState("");
+
+  // -------------------------------------------------------------
+  // Initial Boot & Telemetry Check
+  // -------------------------------------------------------------
+  const checkHealthAndLoadData = async () => {
     try {
-      setConnectionError("");
-
-      const result =
-        await checkBackendHealth();
-
-      if (result.status !== "ok") {
-        throw new Error(
-          "Backend health check failed."
-        );
+      const health = await checkBackendHealth();
+      if (health && health.status === "ok") {
+        setBackendConnected(true);
+      } else {
+        setBackendConnected(false);
       }
-
-      setBackendConnected(true);
-
-    } catch (error) {
-      console.error(
-        "Backend connection error:",
-        error
-      );
-
+    } catch {
       setBackendConnected(false);
+    }
 
-      setConnectionError(
-        error?.message ||
-        "Unable to connect to EvidenceChain backend."
-      );
+    // Authoritative Consensus Layer Check via /api/diagnostics/summary
+    try {
+      const diag = await getDiagnosticsSummaryAPI();
+      if (diag && diag.status === "success" && diag.services) {
+        const hardhat = diag.services.find(
+          (s) => s.id === "hardhat_node" || s.category === "Consensus Layer"
+        );
+        setBlockchainConnected(hardhat?.status === "Healthy");
+      } else {
+        setBlockchainConnected(false);
+      }
+    } catch {
+      setBlockchainConnected(false);
+    }
+
+    // Load registered evidence list
+    try {
+      const res = await listEvidenceAPI();
+      if (res && res.evidence) {
+        setEvidenceList(res.evidence);
+      }
+    } catch (err) {
+      console.warn("Could not load evidence list from API:", err);
     }
   };
 
-
-  // ==========================================================
-  // REGISTER FILE
-  // ==========================================================
-
-  const handleRegisterFile = async (file) => {
-
-    setRegisterFile(file);
-
-    setRegisterResult(null);
-    setRegisterError("");
-
-    if (!file) {
-      setRegisterHash("");
-      return;
-    }
-
-    try {
-
-      const hash =
-        await calculateSHA256(file);
-
-      setRegisterHash(hash);
-
-    } catch (error) {
-
-      console.error(error);
-
-      setRegisterHash("");
-
-      setRegisterError(
-        "Unable to calculate file hash."
-      );
-    }
-  };
-
-
-  // ==========================================================
-  // REGISTER EVIDENCE
-  // ==========================================================
-
-  const handleRegister = async () => {
-
-    setRegisterError("");
-    setRegisterResult(null);
-
-    if (!backendConnected) {
-
-      setRegisterError(
-        "Please connect to the EvidenceChain backend first."
-      );
-
-      return;
-    }
-
-    if (!registerCaseId.trim()) {
-
-      setRegisterError(
-        "Please enter a Case ID."
-      );
-
-      return;
-    }
-
-    if (!registerFile) {
-
-      setRegisterError(
-        "Please select an evidence file."
-      );
-
-      return;
-    }
-
-    try {
-
-      setRegisterLoading(true);
-
-      const hash =
-        await calculateSHA256(
-          registerFile
-        );
-
-      setRegisterHash(hash);
-
-      const result =
-        await registerEvidenceAPI(
-          registerFile,
-          registerCaseId.trim(),
-          registerDescription.trim()
-        );
-
-      setRegisterResult(result);
-
-    } catch (error) {
-
-      console.error(
-        "Registration error:",
-        error
-      );
-
-      setRegisterError(
-        error?.message ||
-        "Evidence registration failed."
-      );
-
-    } finally {
-
-      setRegisterLoading(false);
-    }
-  };
-
-
-  // ==========================================================
-  // VERIFY FILE SELECTION
-  // ==========================================================
-
-  const handleVerifyFile = async (file) => {
-
-    setVerifyFile(file);
-
-    setVerificationResult(null);
-    setBlockchainHash("");
-    setVerifyError("");
-
-    if (!file) {
-      setVerifyHash("");
-      return;
-    }
-
-    try {
-
-      const hash =
-        await calculateSHA256(file);
-
-      setVerifyHash(hash);
-
-    } catch (error) {
-
-      console.error(error);
-
-      setVerifyHash("");
-
-      setVerifyError(
-        "Unable to calculate file hash."
-      );
-    }
-  };
-
-
-  // ==========================================================
-  // VERIFY EVIDENCE
-  // ==========================================================
-
-  const handleVerify = async () => {
-
-    setVerifyError("");
-    setVerificationResult(null);
-    setBlockchainHash("");
-
-    if (!backendConnected) {
-
-      setVerifyError(
-        "Please connect to the EvidenceChain backend first."
-      );
-
-      return;
-    }
-
-    if (!verifyEvidenceId.trim()) {
-
-      setVerifyError(
-        "Please enter an Evidence ID."
-      );
-
-      return;
-    }
-
-    if (!verifyFile) {
-
-      setVerifyError(
-        "Please select an evidence file."
-      );
-
-      return;
-    }
-
-    try {
-
-      setVerifyLoading(true);
-
-      // ------------------------------------------------------
-      // STEP 1: CALCULATE CURRENT FILE HASH
-      // ------------------------------------------------------
-
-      const currentHash =
-        await calculateSHA256(
-          verifyFile
-        );
-
-      setVerifyHash(currentHash);
-
-      // ------------------------------------------------------
-      // STEP 2: GET BLOCKCHAIN RECORD THROUGH BACKEND
-      // ------------------------------------------------------
-
-      const evidenceResponse =
-        await getEvidenceAPI(
-          verifyEvidenceId.trim()
-        );
-
-      const blockchainEvidence =
-        evidenceResponse.evidence;
-
-      const storedHash =
-        blockchainEvidence.evidenceHash;
-
-      setBlockchainHash(storedHash);
-
-      // ------------------------------------------------------
-      // STEP 3: ASK BACKEND TO VERIFY
-      // ------------------------------------------------------
-
-      const result =
-        await verifyEvidenceAPI(
-          verifyEvidenceId.trim(),
-          currentHash
-        );
-
-      // ------------------------------------------------------
-      // STEP 4: DISPLAY RESULT
-      // ------------------------------------------------------
-
-      setVerificationResult(
-        Boolean(result.isAuthentic)
-      );
-
-    } catch (error) {
-
-      console.error(
-        "Verification error:",
-        error
-      );
-
-      setVerifyError(
-        error?.message ||
-        "Verification failed. Check the Evidence ID and file."
-      );
-
-    } finally {
-
-      setVerifyLoading(false);
-    }
-  };
-
-  // ==========================================================
-  // GET EVIDENCE DETAILS
-  // ==========================================================
-
-  const handleGetDetails = async () => {
-
-    setDetailsError("");
-    setEvidenceDetails(null);
-    setAccessHistory([]);
-
-    if (!backendConnected) {
-
-      setDetailsError(
-        "Please connect to the EvidenceChain backend first."
-      );
-
-      return;
-    }
-
-    if (!detailsEvidenceId.trim()) {
-
-      setDetailsError(
-        "Please enter an Evidence ID."
-      );
-
-      return;
-    }
-
-    try {
-
-      setDetailsLoading(true);
-
-      const evidenceId =
-        detailsEvidenceId.trim();
-
-      const result =
-        await getEvidenceAPI(evidenceId);
-
-      setEvidenceDetails({
-        blockchain: result.evidence,
-        metadata: result.database,
+  useEffect(() => {
+    let active = true;
+
+    // Verify existing server-side authenticated session on mount (survives page refresh)
+    getMeAPI()
+      .then((res) => {
+        if (active && res?.status === "authenticated" && res?.user) {
+          setCurrentUser(res.user);
+          setIsAuthenticated(true);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setIsAuthenticated(false);
+        }
+      })
+      .finally(() => {
+        if (active) {
+          setAuthChecking(false);
+        }
       });
 
-      // ------------------------------------------------------
-      // RECORD THAT THE EVIDENCE WAS ACCESSED
-      // ------------------------------------------------------
+    checkBackendHealth()
+      .then((health) => {
+        if (active) setBackendConnected(health?.status === "ok");
+      })
+      .catch(() => {
+        if (active) setBackendConnected(false);
+      });
 
+    listEvidenceAPI()
+      .then((res) => {
+        if (active && res?.evidence) setEvidenceList(res.evidence);
+      })
+      .catch((err) => {
+        console.warn("Initial load error:", err);
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
+
+  // Hardware-accelerated ambient illumination spotlight tracking
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      const card = e.target.closest?.(".ambient-card");
+      if (card) {
+        const rect = card.getBoundingClientRect();
+        card.style.setProperty("--mouse-x", `${e.clientX - rect.left}px`);
+        card.style.setProperty("--mouse-y", `${e.clientY - rect.top}px`);
+      }
+    };
+    window.addEventListener("pointermove", handleMouseMove, { passive: true });
+    return () => window.removeEventListener("pointermove", handleMouseMove);
+  }, []);
+
+  // Subtle magnetic attraction for primary action controls
+  useEffect(() => {
+    // Only apply if user does not prefer reduced motion
+    if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
+
+    const magneticBtns = document.querySelectorAll(".btn-tactile-primary, .btn-magnetic");
+    const cleanupFns = [];
+
+    magneticBtns.forEach((btn) => {
+      const onMouseMove = (e) => {
+        const rect = btn.getBoundingClientRect();
+        const x = e.clientX - (rect.left + rect.width / 2);
+        const y = e.clientY - (rect.top + rect.height / 2);
+        const maxDist = 36;
+        const dist = Math.hypot(x, y);
+
+        if (dist < maxDist) {
+          const pullX = (x / maxDist) * 4;
+          const pullY = (y / maxDist) * 4;
+          btn.style.transform = `translate(${pullX}px, ${pullY}px)`;
+        } else {
+          btn.style.transform = "translate(0px, 0px)";
+        }
+      };
+
+      const onMouseLeave = () => {
+        btn.style.transform = "translate(0px, 0px)";
+      };
+
+      btn.addEventListener("mousemove", onMouseMove);
+      btn.addEventListener("mouseleave", onMouseLeave);
+
+      cleanupFns.push(() => {
+        btn.removeEventListener("mousemove", onMouseMove);
+        btn.removeEventListener("mouseleave", onMouseLeave);
+      });
+    });
+
+    return () => cleanupFns.forEach((fn) => fn());
+  }, [activeView]);
+
+  // -------------------------------------------------------------
+  // Authentication Handlers
+  // -------------------------------------------------------------
+  const handleLoginSuccess = (officer) => {
+    if (officer) {
+      setCurrentUser(officer);
+    }
+    setIsAuthenticated(true);
+    setPublicPage("landing");
+    setActiveView("dashboard");
+    showToast(`Authenticated as ${officer?.name || "Forensic Officer"}. Session established.`, "success");
+    fetchSystemData();
+  };
+
+  const handleLogout = async () => {
+    closeFileViewer();
+    try {
+      await logoutAPI();
+    } catch (err) {
+      console.warn("Server-side logout error:", err);
+    }
+    setIsAuthenticated(false);
+    setPublicPage("landing");
+    setCurrentUser(DEFAULT_OFFICER);
+    showToast("Institutional session terminated securely.", "info");
+  };
+
+  // -------------------------------------------------------------
+  // Evidence Selection & Details Fetching
+  // -------------------------------------------------------------
+  const handleSelectEvidence = async (evidenceId) => {
+    setSelectedEvidenceId(evidenceId);
+    setActiveView("details");
+    setDetailsError("");
+    setEvidenceDetails(null);
+    setDetailsAccessHistory([]);
+    setDetailsViewAllowed(null);
+    setDetailsDownloadAllowed(null);
+    closeFileViewer();
+
+    try {
+      setDetailsLoading(true);
+      const res = await getEvidenceAPI(evidenceId);
+      setEvidenceDetails({
+        ...res,
+        blockchain: res.evidence || {},
+        metadata: res.database || {},
+        isOnChain: Boolean(res.isOnChain),
+        isHistorical: Boolean(res.isHistorical),
+        ledgerStatus: res.ledgerStatus || (res.isHistorical ? "HISTORICAL_RECORD" : res.isOnChain ? "VERIFIED_ACTIVE" : "NEVER_ANCHORED"),
+        ledgerStatusLabel: res.ledgerStatusLabel || (res.isHistorical ? "Historical Ledger Record" : res.isOnChain ? "Active Ledger Record" : "Never Anchored"),
+      });
+
+      // Check current user view and download permissions
+      const officerAddr = currentUser.walletAddress;
       try {
-
-        await recordAccessAPI(
-          evidenceId
-        );
-
-      } catch (accessError) {
-
-        console.warn(
-          "Could not record evidence access:",
-          accessError
-        );
-
+        const vRes = await checkViewAccessAPI(evidenceId, officerAddr);
+        setDetailsViewAllowed(Boolean(vRes.canView));
+      } catch {
+        setDetailsViewAllowed(null);
       }
 
-      // ------------------------------------------------------
-      // LOAD ACCESS HISTORY
-      // ------------------------------------------------------
-
       try {
-
-        const accessResult =
-          await getAccessHistoryAPI(
-            evidenceId
-          );
-
-        setAccessHistory(
-          accessResult.accessHistory || []
-        );
-
-      } catch (accessError) {
-
-        console.warn(
-          "Could not load access history:",
-          accessError
-        );
-
+        const dRes = await checkDownloadAccessAPI(evidenceId, officerAddr);
+        setDetailsDownloadAllowed(Boolean(dRes.canDownload));
+      } catch {
+        setDetailsDownloadAllowed(null);
       }
 
-    } catch (error) {
-
-      console.error(
-        "Details error:",
-        error
-      );
-
-      setDetailsError(
-        error?.message ||
-        "Evidence not found."
-      );
-
+      // Fetch on-chain access history
+      try {
+        const hRes = await getAccessHistoryAPI(evidenceId);
+        setDetailsAccessHistory(hRes.accessHistory || []);
+      } catch {
+        setDetailsAccessHistory([]);
+      }
+    } catch (err) {
+      setDetailsError(err.message || "Failed to load evidence details.");
     } finally {
-
       setDetailsLoading(false);
     }
   };
 
-
-  // ==========================================================
-  // ACCESS MANAGEMENT
-  // ==========================================================
-
-  const handleCheckViewAccess = async () => {
-
-    setAccessError("");
-    setAccessResult(null);
-
-    if (!backendConnected) {
-
-      setAccessError(
-        "Please connect to the EvidenceChain backend first."
-      );
-
-      return;
-    }
-
-    if (!accessEvidenceId.trim()) {
-
-      setAccessError(
-        "Please enter an Evidence ID."
-      );
-
-      return;
-    }
-
-    if (!accessUserAddress.trim()) {
-
-      setAccessError(
-        "Please enter a user Ethereum address."
-      );
-
-      return;
-    }
-
-    if (
-      !isValidEthereumAddress(
-        accessUserAddress.trim()
-      )
-    ) {
-
-      setAccessError(
-        "Please enter a valid Ethereum address."
-      );
-
-      return;
-    }
+  // -------------------------------------------------------------
+  // View File Content (In-App Protected Viewer)
+  // -------------------------------------------------------------
+  const handleViewFile = async (evidenceId) => {
+    const targetId = typeof evidenceId === "string" && evidenceId ? evidenceId : selectedEvidenceId;
+    if (!targetId) return;
 
     try {
-
-      setAccessLoading(true);
-
-      const result =
-        await checkViewAccessAPI(
-          accessEvidenceId.trim(),
-          accessUserAddress.trim()
-        );
-
-      setAccessResult({
-        type: "VIEW",
-        result
-      });
-
-    } catch (error) {
-
-      console.error(
-        "View access check error:",
-        error
+      const response = await fetch(
+        `${API_BASE_URL}/api/evidence/${encodeURIComponent(
+          targetId
+        )}/view?userAddress=${encodeURIComponent(currentUser.walletAddress)}`
       );
 
-      setAccessError(
-        error?.message ||
-        "Could not check view access."
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || errData.message || "View access denied.");
+      }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+
+      if (viewedFileUrl) {
+        URL.revokeObjectURL(viewedFileUrl);
+      }
+
+      setViewedFileUrl(objectUrl);
+
+      const disposition = response.headers.get("Content-Disposition");
+      let filename = "evidence-file";
+      if (disposition) {
+        const match = disposition.match(/filename="?([^"]+)"?/i);
+        if (match?.[1]) filename = match[1];
+      }
+      setViewedFileName(filename);
+
+      // Refresh access history for this item
+      const hRes = await getAccessHistoryAPI(targetId);
+      setDetailsAccessHistory(hRes.accessHistory || []);
+    } catch (err) {
+      showToast("View Error: " + err.message, "error");
+    }
+  };
+
+  // -------------------------------------------------------------
+  // Download Evidence File
+  // -------------------------------------------------------------
+  const handleDownloadFile = async (evidenceId) => {
+    const targetId = typeof evidenceId === "string" && evidenceId ? evidenceId : selectedEvidenceId;
+    if (!targetId) return;
+
+    try {
+      const response = await fetch(
+        `${API_BASE_URL}/api/evidence/${encodeURIComponent(
+          targetId
+        )}/download?userAddress=${encodeURIComponent(currentUser.walletAddress)}`
       );
 
+      if (!response.ok) {
+        const errData = await response.json().catch(() => ({}));
+        throw new Error(errData.error || errData.message || "Download access denied.");
+      }
+
+      const blob = await response.blob();
+      const objectUrl = URL.createObjectURL(blob);
+
+      const disposition = response.headers.get("Content-Disposition");
+      let filename = "evidence-file";
+      if (disposition) {
+        const match = disposition.match(/filename="?([^"]+)"?/i);
+        if (match?.[1]) filename = match[1];
+      }
+
+      const link = document.createElement("a");
+      link.href = objectUrl;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(objectUrl);
+
+      // Refresh access history
+      const hRes = await getAccessHistoryAPI(evidenceId);
+      setDetailsAccessHistory(hRes.accessHistory || []);
+    } catch (err) {
+      showToast("Download Error: " + err.message, "error");
+    }
+  };
+
+  const closeFileViewer = () => {
+    if (viewedFileUrl) {
+      URL.revokeObjectURL(viewedFileUrl);
+    }
+    setViewedFileUrl("");
+    setViewedFileName("");
+  };
+
+  // -------------------------------------------------------------
+  // Evidence Registration
+  // -------------------------------------------------------------
+  const handleRegisterEvidence = async (file, caseId, description, clientHash = "") => {
+    setRegisterLoading(true);
+    setRegisterError("");
+    setRegisterResult(null);
+
+    try {
+      const res = await registerEvidenceAPI(file, caseId, description, clientHash);
+      setRegisterResult(res);
+      showToast(
+        `Evidence record ${res.evidenceId || ""} catalogued and registered successfully.`,
+        "success",
+        res.transactionHash,
+        "CUSTODY REGISTRATION CONFIRMED"
+      );
+      // Reload evidence repository list
+      const listRes = await listEvidenceAPI();
+      if (listRes?.evidence) {
+        setEvidenceList(listRes.evidence);
+      }
+    } catch (err) {
+      setRegisterError(err.message || "Registration failed.");
+      showToast(err.message || "Registration failed.", "error", null, "REGISTRATION FAILED");
     } finally {
+      setRegisterLoading(false);
+    }
+  };
 
+  // -------------------------------------------------------------
+  // Evidence Integrity Verification
+  // -------------------------------------------------------------
+  const handleVerifyEvidence = async (evidenceId, file) => {
+    setVerifyLoading(true);
+    setVerifyError("");
+    setVerificationResult(null);
+    setVerifyBlockchainHash("");
+    setVerifyCurrentHash("");
+
+    try {
+      // Calculate file SHA-256
+      const buffer = await file.arrayBuffer();
+      const hashBuffer = await crypto.subtle.digest("SHA-256", buffer);
+      const hashHex = Array.from(new Uint8Array(hashBuffer))
+        .map((b) => b.toString(16).padStart(2, "0"))
+        .join("");
+
+      setVerifyCurrentHash(hashHex);
+
+      // Fetch on-chain hash
+      const evRes = await getEvidenceAPI(evidenceId);
+      const onChainHash = evRes.evidence?.evidenceHash;
+      setVerifyBlockchainHash(onChainHash || "");
+
+      // Execute on-chain verify check
+      const vResult = await verifyEvidenceAPI(evidenceId, hashHex);
+      setVerificationResult(vResult);
+
+      if (vResult.result === "AUTHENTIC") {
+        showToast(
+          "Candidate file SHA-256 matches recorded intake digest; active ledger anchor confirmed.",
+          "success",
+          null,
+          "SHA-256 MATCH (ACTIVE LEDGER)"
+        );
+      } else if (vResult.result === "AUTHENTIC_HISTORICAL") {
+        showToast(
+          "Candidate file SHA-256 matches recorded intake digest; historical registration reference recorded; current-ledger verification unavailable.",
+          "warning",
+          null,
+          "SHA-256 MATCH (HISTORICAL RECORD)"
+        );
+      } else {
+        showToast(
+          "Cryptographic hash mismatch! Candidate file has been altered.",
+          "error",
+          null,
+          "TAMPERING DETECTED"
+        );
+      }
+    } catch (err) {
+      setVerifyError(err.message || "Integrity verification failed.");
+      showToast(err.message || "Verification request failed.", "error", null, "VERIFICATION ERROR");
+    } finally {
+      setVerifyLoading(false);
+    }
+  };
+
+  // -------------------------------------------------------------
+  // Access Management (Grant / Revoke / Check)
+  // -------------------------------------------------------------
+  const handleCheckViewAccess = async (evidenceId, userAddress) => {
+    setAccessLoading(true);
+    setAccessError("");
+    try {
+      const res = await checkViewAccessAPI(evidenceId, userAddress);
+      setAccessViewStatus(Boolean(res.canView));
+    } catch (err) {
+      setAccessError(err.message || "Failed to check VIEW permission.");
+    } finally {
       setAccessLoading(false);
     }
   };
 
-
-  const handleCheckDownloadAccess = async () => {
-
+  const handleCheckDownloadAccess = async (evidenceId, userAddress) => {
+    setAccessLoading(true);
     setAccessError("");
-    setAccessResult(null);
-
-    if (!backendConnected) {
-
-      setAccessError(
-        "Please connect to the EvidenceChain backend first."
-      );
-
-      return;
-    }
-
-    if (!accessEvidenceId.trim()) {
-
-      setAccessError(
-        "Please enter an Evidence ID."
-      );
-
-      return;
-    }
-
-    if (!accessUserAddress.trim()) {
-
-      setAccessError(
-        "Please enter a user Ethereum address."
-      );
-
-      return;
-    }
-
-    if (
-      !isValidEthereumAddress(
-        accessUserAddress.trim()
-      )
-    ) {
-
-      setAccessError(
-        "Please enter a valid Ethereum address."
-      );
-
-      return;
-    }
-
     try {
-
-      setAccessLoading(true);
-
-      const result =
-        await checkDownloadAccessAPI(
-          accessEvidenceId.trim(),
-          accessUserAddress.trim()
-        );
-
-      setAccessResult({
-        type: "DOWNLOAD",
-        result
-      });
-
-    } catch (error) {
-
-      console.error(
-        "Download access check error:",
-        error
-      );
-
-      setAccessError(
-        error?.message ||
-        "Could not check download access."
-      );
-
+      const res = await checkDownloadAccessAPI(evidenceId, userAddress);
+      setAccessDownloadStatus(Boolean(res.canDownload));
+    } catch (err) {
+      setAccessError(err.message || "Failed to check DOWNLOAD permission.");
     } finally {
-
       setAccessLoading(false);
     }
   };
 
-
-  const handleGrantViewAccess = async () => {
-
-    await handleAccessAction(
-      grantViewAccessAPI,
-      "View access granted successfully."
-    );
-  };
-
-
-  const handleRevokeViewAccess = async () => {
-
-    await handleAccessAction(
-      revokeViewAccessAPI,
-      "View access revoked successfully."
-    );
-  };
-
-
-  const handleGrantDownloadAccess = async () => {
-
-    await handleAccessAction(
-      grantDownloadAccessAPI,
-      "Download access granted successfully."
-    );
-  };
-
-
-  const handleRevokeDownloadAccess = async () => {
-
-    await handleAccessAction(
-      revokeDownloadAccessAPI,
-      "Download access revoked successfully."
-    );
-  };
-
-
-  const handleAccessAction = async (
-    apiFunction,
-    successMessage
-  ) => {
-
+  const handleGrantViewAccess = async (evidenceId, userAddress, caseId = "", targetName = "") => {
+    setAccessLoading(true);
     setAccessError("");
-    setAccessResult(null);
-
-    if (!backendConnected) {
-
-      setAccessError(
-        "Please connect to the EvidenceChain backend first."
-      );
-
-      return;
-    }
-
-    if (!accessEvidenceId.trim()) {
-
-      setAccessError(
-        "Please enter an Evidence ID."
-      );
-
-      return;
-    }
-
-    if (!accessUserAddress.trim()) {
-
-      setAccessError(
-        "Please enter a user Ethereum address."
-      );
-
-      return;
-    }
-
-    if (
-      !isValidEthereumAddress(
-        accessUserAddress.trim()
-      )
-    ) {
-
-      setAccessError(
-        "Please enter a valid Ethereum address."
-      );
-
-      return;
-    }
-
+    setAccessActionResult(null);
     try {
-
-      setAccessLoading(true);
-
-      const result =
-        await apiFunction(
-          accessEvidenceId.trim(),
-          accessUserAddress.trim()
-        );
-
-      setAccessResult({
-        type: "ACTION",
-        message: successMessage,
-        result
+      const res = await grantViewAccessAPI(evidenceId, userAddress, currentUser.walletAddress, caseId, targetName);
+      setAccessActionResult({
+        success: true,
+        message: `VIEW permission granted on blockchain for ${targetName || userAddress.slice(0, 8) + "..."}`,
+        transactionHash: res.transactionHash,
+        blockNumber: res.blockNumber,
       });
-
-    } catch (error) {
-
-      console.error(
-        "Access management error:",
-        error
+      setAccessViewStatus(true);
+      showToast(
+        `VIEW access granted on blockchain for ${targetName || userAddress.slice(0, 8) + "..."}`,
+        "success",
+        null,
+        "VIEW ACCESS GRANTED"
       );
-
-      setAccessError(
-        error?.message ||
-        "Access management operation failed."
-      );
-
+      return res;
+    } catch (err) {
+      setAccessError(err.message || "Failed to grant VIEW permission.");
+      showToast(err.message || "Failed to grant VIEW permission.", "error", null, "OPERATION DENIED");
+      throw err;
     } finally {
-
       setAccessLoading(false);
     }
   };
 
-
-  // ==========================================================
-  // CLOSE PANELS
-  // ==========================================================
-
-  const closePanels = () => {
-
-    setShowRegister(false);
-    setShowVerify(false);
-    setShowDetails(false);
-    setShowAccessManagement(false);
+  const handleRevokeViewAccess = async (evidenceId, userAddress, caseId = "", targetName = "") => {
+    setAccessLoading(true);
+    setAccessError("");
+    setAccessActionResult(null);
+    try {
+      const res = await revokeViewAccessAPI(evidenceId, userAddress, currentUser.walletAddress, caseId, targetName);
+      setAccessActionResult({
+        success: true,
+        message: `VIEW permission revoked on blockchain for ${targetName || userAddress.slice(0, 8) + "..."}`,
+        transactionHash: res.transactionHash,
+        blockNumber: res.blockNumber,
+      });
+      setAccessViewStatus(false);
+      showToast(
+        `VIEW access revoked on blockchain for ${targetName || userAddress.slice(0, 8) + "..."}`,
+        "warning",
+        null,
+        "VIEW ACCESS REVOKED"
+      );
+      return res;
+    } catch (err) {
+      setAccessError(err.message || "Failed to revoke VIEW permission.");
+      showToast(err.message || "Failed to revoke VIEW permission.", "error", null, "OPERATION DENIED");
+      throw err;
+    } finally {
+      setAccessLoading(false);
+    }
   };
 
+  const handleGrantDownloadAccess = async (evidenceId, userAddress, caseId = "", targetName = "") => {
+    setAccessLoading(true);
+    setAccessError("");
+    setAccessActionResult(null);
+    try {
+      const res = await grantDownloadAccessAPI(evidenceId, userAddress, currentUser.walletAddress, caseId, targetName);
+      setAccessActionResult({
+        success: true,
+        message: `DOWNLOAD permission granted on blockchain for ${targetName || userAddress.slice(0, 8) + "..."}`,
+        transactionHash: res.transactionHash,
+        blockNumber: res.blockNumber,
+      });
+      setAccessDownloadStatus(true);
+      showToast(
+        `DOWNLOAD access granted on blockchain for ${targetName || userAddress.slice(0, 8) + "..."}`,
+        "success",
+        null,
+        "DOWNLOAD ACCESS GRANTED"
+      );
+      return res;
+    } catch (err) {
+      setAccessError(err.message || "Failed to grant DOWNLOAD permission.");
+      showToast(err.message || "Failed to grant DOWNLOAD permission.", "error", null, "OPERATION DENIED");
+      throw err;
+    } finally {
+      setAccessLoading(false);
+    }
+  };
 
-  // ==========================================================
-  // UI
-  // ==========================================================
+  const handleRevokeDownloadAccess = async (evidenceId, userAddress, caseId = "", targetName = "") => {
+    setAccessLoading(true);
+    setAccessError("");
+    setAccessActionResult(null);
+    try {
+      const res = await revokeDownloadAccessAPI(evidenceId, userAddress, currentUser.walletAddress, caseId, targetName);
+      setAccessActionResult({
+        success: true,
+        message: `DOWNLOAD permission revoked on blockchain for ${targetName || userAddress.slice(0, 8) + "..."}`,
+        transactionHash: res.transactionHash,
+        blockNumber: res.blockNumber,
+      });
+      setAccessDownloadStatus(false);
+      showToast(
+        `DOWNLOAD access revoked on blockchain for ${targetName || userAddress.slice(0, 8) + "..."}`,
+        "warning",
+        null,
+        "DOWNLOAD ACCESS REVOKED"
+      );
+      return res;
+    } catch (err) {
+      setAccessError(err.message || "Failed to revoke DOWNLOAD permission.");
+      showToast(err.message || "Failed to revoke DOWNLOAD permission.", "error", null, "OPERATION DENIED");
+      throw err;
+    } finally {
+      setAccessLoading(false);
+    }
+  };
 
-  // ==========================================================
-  // UI
-  // ==========================================================
+  // -------------------------------------------------------------
+  // Access History Fetching
+  // -------------------------------------------------------------
+  const handleFetchAccessHistory = useCallback(async (evidenceId) => {
+    if (!evidenceId) return;
+    setHistoryLoading(true);
+    setHistoryError("");
+    try {
+      const res = await getAccessHistoryAPI(evidenceId);
+      setHistoryRecords(res.records || res.accessHistory || []);
+      return res;
+    } catch (err) {
+      setHistoryError(err.message || "Failed to fetch access history.");
+      setHistoryRecords([]);
+      throw err;
+    } finally {
+      setHistoryLoading(false);
+    }
+  }, []);
 
-  return (
-
-    <div className="app">
-
-      {/* ================================================== */}
-      {/* HEADER */}
-      {/* ================================================== */}
-
-      <header className="header">
-
-        <div>
-
-          <h1>
-            EvidenceChain
-          </h1>
-
-          <p>
-            Secure Digital Evidence Management
-          </p>
-
+  // -------------------------------------------------------------
+  // RENDER: Session Pre-Flight Verification
+  // -------------------------------------------------------------
+  if (authChecking) {
+    return (
+      <div
+        style={{
+          minHeight: "100vh",
+          backgroundColor: "var(--bg-app)",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          justifyContent: "center",
+          fontFamily: "var(--font-mono)",
+          fontSize: "12px",
+          color: "var(--text-secondary)",
+          gap: "12px",
+        }}
+      >
+        <div style={{ fontFamily: "var(--font-serif)", fontSize: "20px", fontWeight: 600, color: "var(--text-primary)" }}>
+          EvidenceChain
         </div>
-
-        <button
-          className="connect-button"
-          onClick={handleConnect}
-        >
-
-          {backendConnected
-            ? "Backend Connected"
-            : "Connect Backend"}
-
-        </button>
-
-      </header>
-
-
-      {/* ================================================== */}
-      {/* MAIN */}
-      {/* ================================================== */}
-
-      <main className="main">
-
-
-        {/* ================================================== */}
-        {/* HERO */}
-        {/* ================================================== */}
-
-        <section className="hero-section">
-
-          <h2>
-            Digital Evidence Chain of Custody
-          </h2>
-
-          <p>
-            Register, verify, and track digital
-            evidence securely using blockchain
-            technology.
-          </p>
-
-        </section>
-
-
-        {/* ================================================== */}
-        {/* CONNECTION STATUS */}
-        {/* ================================================== */}
-
-        {backendConnected && (
-
-          <div className="connection-status">
-
-            <h3>
-              ● EvidenceChain Backend Connected
-            </h3>
-
-            <p>
-              Flask API: http://127.0.0.1:5001
-            </p>
-
-            <p>
-              Blockchain: Hardhat Local Network
-            </p>
-
-          </div>
-
-        )}
-
-
-        {/* ================================================== */}
-        {/* CONNECTION ERROR */}
-        {/* ================================================== */}
-
-        {connectionError && (
-
-          <div className="error-box">
-
-            ✗ {connectionError}
-
-          </div>
-
-        )}
-
-
-        {/* ================================================== */}
-        {/* REGISTER PANEL */}
-        {/* ================================================== */}
-
-        {showRegister && (
-
-          <section className="panel">
-
-            <button
-              className="close-button"
-              onClick={closePanels}
-            >
-              ×
-            </button>
-
-
-            <h2>
-              Register Digital Evidence
-            </h2>
-
-            <p>
-              Upload evidence and permanently
-              record its SHA-256 hash on the
-              blockchain.
-            </p>
-
-
-            {/* CASE ID */}
-
-            <div className="form-group">
-
-              <label>
-                Case ID
-              </label>
-
-              <input
-                type="text"
-                placeholder="e.g. CASE-004"
-                value={registerCaseId}
-                onChange={(e) =>
-                  setRegisterCaseId(
-                    e.target.value
-                  )
-                }
-              />
-
-            </div>
-
-
-            {/* DESCRIPTION */}
-
-            <div className="form-group">
-
-              <label>
-                Description
-              </label>
-
-              <input
-                type="text"
-                placeholder="Brief description of evidence"
-                value={registerDescription}
-                onChange={(e) =>
-                  setRegisterDescription(
-                    e.target.value
-                  )
-                }
-              />
-
-            </div>
-
-
-            {/* FILE */}
-
-            <div className="form-group">
-
-              <label>
-                Evidence File
-              </label>
-
-              <input
-                type="file"
-                onChange={(e) =>
-                  handleRegisterFile(
-                    e.target.files[0]
-                  )
-                }
-              />
-
-            </div>
-
-
-            {/* HASH */}
-
-            {registerHash && (
-
-              <div className="hash-box">
-
-                <strong>
-                  SHA-256 Hash
-                </strong>
-
-                <span>
-                  {registerHash}
-                </span>
-
-              </div>
-
-            )}
-
-
-            {/* RESULT */}
-
-            {registerResult && (
-
-              <div className="success-box">
-
-                <h3>
-                  ✓ Evidence Registered
-                </h3>
-
-                <p>
-                  Evidence registered successfully
-                  on the blockchain.
-                </p>
-
-                <p>
-                  <strong>
-                    Evidence ID:
-                  </strong>
-                  {" "}
-                  {registerResult.evidenceId}
-                </p>
-
-                <p>
-                  <strong>
-                    Case ID:
-                  </strong>
-                  {" "}
-                  {registerResult.caseId}
-                </p>
-
-                <p>
-                  <strong>
-                    SHA-256:
-                  </strong>
-                  {" "}
-                  {registerResult.evidenceHash}
-                </p>
-
-                <p>
-                  <strong>
-                    Block:
-                  </strong>
-                  {" "}
-                  {registerResult.blockNumber}
-                </p>
-
-                <p>
-                  <strong>
-                    Transaction:
-                  </strong>
-                </p>
-
-                <span>
-                  {registerResult.transactionHash}
-                </span>
-
-              </div>
-
-            )}
-
-
-            {/* ERROR */}
-
-            {registerError && (
-
-              <div className="error-box">
-
-                ✗ {registerError}
-
-              </div>
-
-            )}
-
-
-            {/* BUTTON */}
-
-            <button
-              className="primary-button"
-              onClick={handleRegister}
-              disabled={registerLoading}
-            >
-
-              {registerLoading
-                ? "Registering..."
-                : "Register on Blockchain"}
-
-            </button>
-
-          </section>
-
-        )}
-
-
-        {/* ================================================== */}
-        {/* VERIFY PANEL */}
-        {/* ================================================== */}
-
-        {showVerify && (
-
-          <section className="panel">
-
-            <button
-              className="close-button"
-              onClick={closePanels}
-            >
-              ×
-            </button>
-
-
-            <h2>
-              Verify Digital Evidence
-            </h2>
-
-            <p>
-              Compare the uploaded file's
-              SHA-256 hash with the hash
-              stored on the blockchain.
-            </p>
-
-
-            {/* EVIDENCE ID */}
-
-            <div className="form-group">
-
-              <label>
-                Evidence ID
-              </label>
-
-              <input
-                type="text"
-                placeholder="e.g. EVD-9FE5BD91"
-                value={verifyEvidenceId}
-                onChange={(e) => {
-
-                  setVerifyEvidenceId(
-                    e.target.value
-                  );
-
-                  setVerificationResult(
-                    null
-                  );
-
-                  setBlockchainHash("");
-                  setVerifyError("");
-
-                }}
-              />
-
-            </div>
-
-
-            {/* FILE */}
-
-            <div className="form-group">
-
-              <label>
-                Evidence File
-              </label>
-
-              <input
-                type="file"
-                onChange={(e) =>
-                  handleVerifyFile(
-                    e.target.files[0]
-                  )
-                }
-              />
-
-            </div>
-
-
-            {/* CURRENT FILE HASH */}
-
-            {verifyHash && (
-
-              <div className="hash-box">
-
-                <strong>
-                  Uploaded File SHA-256
-                </strong>
-
-                <span>
-                  {verifyHash}
-                </span>
-
-              </div>
-
-            )}
-
-
-            {/* BLOCKCHAIN HASH */}
-
-            {blockchainHash && (
-
-              <div className="hash-box">
-
-                <strong>
-                  Blockchain Stored Hash
-                </strong>
-
-                <span>
-                  {blockchainHash}
-                </span>
-
-              </div>
-
-            )}
-
-
-            {/* ERROR */}
-
-            {verifyError && (
-
-              <div className="error-box">
-
-                ✗ {verifyError}
-
-              </div>
-
-            )}
-
-
-            {/* AUTHENTIC */}
-
-            {verificationResult === true && (
-
-              <div className="success-box">
-
-                <h3>
-                  ✓ EVIDENCE AUTHENTIC
-                </h3>
-
-                <p>
-                  The uploaded file matches
-                  the hash stored on the
-                  blockchain.
-                </p>
-
-                <p>
-                  Evidence integrity verified
-                  successfully.
-                </p>
-
-              </div>
-
-            )}
-
-
-            {/* TAMPERED */}
-
-            {verificationResult === false && (
-
-              <div className="tampered-box">
-
-                <h3>
-                  ✗ TAMPER DETECTED
-                </h3>
-
-                <p>
-                  The uploaded file does NOT
-                  match the hash stored on the
-                  blockchain.
-                </p>
-
-                <p>
-                  The evidence may have been
-                  modified after registration.
-                </p>
-
-              </div>
-
-            )}
-
-
-            {/* BUTTON */}
-
-            <button
-              className="primary-button"
-              onClick={handleVerify}
-              disabled={verifyLoading}
-            >
-
-              {verifyLoading
-                ? "Verifying..."
-                : "Verify Against Blockchain"}
-
-            </button>
-
-          </section>
-
-        )}
-
-
-        {/* ================================================== */}
-        {/* DETAILS PANEL */}
-        {/* ================================================== */}
-
-        {showDetails && (
-
-          <section className="panel">
-
-            <button
-              className="close-button"
-              onClick={closePanels}
-            >
-              ×
-            </button>
-
-
-            <h2>
-              Evidence Details
-            </h2>
-
-            <p>
-              Retrieve evidence information,
-              custody history, and access history.
-            </p>
-
-
-            {/* EVIDENCE ID */}
-
-            <div className="form-group">
-
-              <label>
-                Evidence ID
-              </label>
-
-              <input
-                type="text"
-                placeholder="e.g. EVD-9FE5BD91"
-                value={detailsEvidenceId}
-                onChange={(e) =>
-                  setDetailsEvidenceId(
-                    e.target.value
-                  )
-                }
-              />
-
-            </div>
-
-
-            {/* ERROR */}
-
-            {detailsError && (
-
-              <div className="error-box">
-
-                ✗ {detailsError}
-
-              </div>
-
-            )}
-
-
-            {/* BUTTON */}
-
-            <button
-              className="primary-button"
-              onClick={handleGetDetails}
-              disabled={detailsLoading}
-            >
-
-              {detailsLoading
-                ? "Loading..."
-                : "Get Evidence Details"}
-
-            </button>
-
-
-            {/* DETAILS */}
-
-            {evidenceDetails && (
-
-              <div className="details-table">
-
-                <div>
-
-                  <strong>
-                    Evidence ID
-                  </strong>
-
-                  <span>
-                    {evidenceDetails.blockchain.evidenceId}
-                  </span>
-
-                </div>
-
-
-                <div>
-
-                  <strong>
-                    Case ID
-                  </strong>
-
-                  <span>
-                    {evidenceDetails.blockchain.caseId}
-                  </span>
-
-                </div>
-
-
-                <div>
-
-                  <strong>
-                    Blockchain Hash
-                  </strong>
-
-                  <span>
-                    {evidenceDetails.blockchain.evidenceHash}
-                  </span>
-
-                </div>
-
-
-                <div>
-
-                  <strong>
-                    Registered By
-                  </strong>
-
-                  <span>
-                    {shortenAddress(
-                      evidenceDetails.blockchain.registeredBy
-                    )}
-                  </span>
-
-                </div>
-
-
-                <div>
-
-                  <strong>
-                    Registered At
-                  </strong>
-
-                  <span>
-                    {formatTimestamp(
-                      evidenceDetails.blockchain.timestamp
-                    )}
-                  </span>
-
-                </div>
-
-
-                <div>
-
-                  <strong>
-                    Current Custodian
-                  </strong>
-
-                  <span>
-                    {shortenAddress(
-                      evidenceDetails.blockchain.currentCustodian
-                    )}
-                  </span>
-
-                </div>
-
-
-                {evidenceDetails.metadata && (
-
-                  <>
-
-                    <div>
-
-                      <strong>
-                        File Name
-                      </strong>
-
-                      <span>
-                        {
-                          evidenceDetails.metadata.title
-                        }
-                      </span>
-
-                    </div>
-
-
-                    <div>
-
-                      <strong>
-                        Description
-                      </strong>
-
-                      <span>
-                        {
-                          evidenceDetails.metadata.description ||
-                          "N/A"
-                        }
-                      </span>
-
-                    </div>
-
-                  </>
-
-                )}
-
-              </div>
-
-            )}
-
-
-            {/* ACCESS HISTORY */}
-
-            {evidenceDetails && (
-
-              <div className="history-section">
-
-                <h3>
-                  Access History
-                </h3>
-
-                {accessHistory.length === 0 ? (
-
-                  <p>
-                    No access history recorded.
-                  </p>
-
-                ) : (
-
-                  accessHistory.map(
-                    (record, index) => (
-
-                      <div
-                        className="history-item"
-                        key={index}
-                      >
-
-                        <strong>
-                          Access {index + 1}
-                        </strong>
-
-                        <span>
-                          By:{" "}
-                          {shortenAddress(
-                            record.accessedBy
-                          )}
-                        </span>
-
-                        <span>
-                          Time:{" "}
-                          {formatTimestamp(
-                            record.timestamp
-                          )}
-                        </span>
-
-                      </div>
-
-                    )
-                  )
-
-                )}
-
-              </div>
-
-            )}
-            </section>
-        )}
-
-
-
-        {/* ================================================== */}
-        {/* FEATURE CARDS */}
-        {/* ================================================== */}
-
-        <section className="cards">
-
-
-          {/* REGISTER */}
-
-          <div className="card">
-
-            <div className="card-icon">
-              📤
-            </div>
-
-            <h2>
-              Register Evidence
-            </h2>
-
-            <p>
-              Upload evidence and permanently
-              record its cryptographic hash
-              on the blockchain.
-            </p>
-
-            <button
-              className="primary-button"
-              onClick={() => {
-
-                closePanels();
-                setShowRegister(true);
-
+        <div>VERIFYING INSTITUTIONAL SECURITY CREDENTIALS...</div>
+      </div>
+    );
+  }
+
+  // -------------------------------------------------------------
+  // RENDER: Unauthenticated -> Landing Page or Secure Access Portal
+  // -------------------------------------------------------------
+  if (!isAuthenticated) {
+    if (publicPage === "login") {
+      return (
+        <LoginView
+          onLoginSuccess={handleLoginSuccess}
+          onBackToHome={() => setPublicPage("landing")}
+          backendConnected={backendConnected}
+          blockchainConnected={blockchainConnected}
+        />
+      );
+    }
+
+    return (
+      <LandingPageView
+        onNavigateToLogin={() => setPublicPage("login")}
+      />
+    );
+  }
+
+  // -------------------------------------------------------------
+  // RENDER: Authenticated -> Main Forensic Operations Console
+  // -------------------------------------------------------------
+  return (
+    <div className="app-layout">
+      {/* Sidebar Shell */}
+      <Sidebar
+        activeView={activeView}
+        setActiveView={setActiveView}
+        currentUser={currentUser}
+        onOpenLogin={() => setIsLoginModalOpen(true)}
+        onLogout={handleLogout}
+        backendConnected={backendConnected}
+      />
+
+      {/* Main View Area */}
+      <div className="app-main-wrapper">
+        <Header
+          activeView={activeView}
+          backendConnected={backendConnected}
+          blockchainConnected={blockchainConnected}
+          onRefresh={checkHealthAndLoadData}
+        />
+
+        <main className="app-content-area">
+          {activeView === "dashboard" && (
+            <DashboardView
+              evidenceList={evidenceList}
+              backendConnected={backendConnected}
+              blockchainConnected={blockchainConnected}
+              currentUser={currentUser}
+              onNavigate={setActiveView}
+              onSelectEvidence={handleSelectEvidence}
+            />
+          )}
+
+          {activeView === "evidence" && (
+            <EvidenceListView
+              evidenceList={evidenceList}
+              searchQuery={searchQuery}
+              setSearchQuery={setSearchQuery}
+              onNavigate={setActiveView}
+              onSelectEvidence={handleSelectEvidence}
+              onVerifyEvidence={(id) => {
+                setVerifyEvidenceId(id);
+                setActiveView("verify");
               }}
-            >
-              Register Evidence
-            </button>
-
-          </div>
-
-
-          {/* VERIFY */}
-
-          <div className="card">
-
-            <div className="card-icon">
-              🔍
-            </div>
-
-            <h2>
-              Verify Evidence
-            </h2>
-
-            <p>
-              Check whether an evidence file
-              matches the hash stored on the
-              blockchain.
-            </p>
-
-            <button
-              className="primary-button"
-              onClick={() => {
-
-                closePanels();
-                setShowVerify(true);
-
+              onManageAccess={(id) => {
+                setSelectedEvidenceId(id);
+                setActiveView("access");
               }}
-            >
-              Verify Evidence
-            </button>
+              currentUser={currentUser}
+            />
+          )}
 
-          </div>
-
-
-          {/* DETAILS */}
-
-          <div className="card">
-
-            <div className="card-icon">
-              📋
-            </div>
-
-            <h2>
-              Evidence Details
-            </h2>
-
-            <p>
-              View evidence metadata,
-              registration details, custody
-              information, and access history.
-            </p>
-
-            <button
-              className="primary-button"
-              onClick={() => {
-
-                closePanels();
-                setShowDetails(true);
-
+          {activeView === "register" && (
+            <RegisterEvidenceView
+              onRegister={handleRegisterEvidence}
+              loading={registerLoading}
+              error={registerError}
+              result={registerResult}
+              evidenceList={evidenceList}
+              onReset={() => {
+                setRegisterResult(null);
+                setRegisterError("");
               }}
-            >
-              View Details
-            </button>
+              backendConnected={backendConnected}
+              currentUser={currentUser}
+              onBack={() => setActiveView("evidence")}
+              onNavigateHistory={(evId) => {
+                if (evId) setSelectedEvidenceId(evId);
+                setActiveView("history");
+              }}
+            />
+          )}
 
-          </div>
+          {activeView === "verify" && (
+            <VerifyEvidenceView
+              evidenceList={evidenceList}
+              initialEvidenceId={verifyEvidenceId || selectedEvidenceId}
+              onVerify={handleVerifyEvidence}
+              loading={verifyLoading}
+              error={verifyError}
+              verificationResult={verificationResult}
+              blockchainHash={verifyBlockchainHash}
+              currentHash={verifyCurrentHash}
+              onReset={() => {
+                setVerificationResult(null);
+                setVerifyError("");
+                setVerifyBlockchainHash("");
+                setVerifyCurrentHash("");
+              }}
+              backendConnected={backendConnected}
+              onBack={() => setActiveView("evidence")}
+            />
+          )}
 
-{/* ACCESS MANAGEMENT */}
+          {activeView === "details" && (
+            <EvidenceDetailsView
+              evidenceId={selectedEvidenceId || (evidenceList[0]?.evidenceId || "EVD-DA7FA47B")}
+              evidenceData={evidenceDetails}
+              accessHistory={detailsAccessHistory}
+              loading={detailsLoading}
+              error={detailsError}
+              currentUser={currentUser}
+              onCheckViewAccess={handleCheckViewAccess}
+              onCheckDownloadAccess={handleCheckDownloadAccess}
+              viewAccessAllowed={detailsViewAllowed}
+              downloadAccessAllowed={detailsDownloadAllowed}
+              onViewFile={handleViewFile}
+              onDownloadFile={handleDownloadFile}
+              viewedFileUrl={viewedFileUrl}
+              viewedFileName={viewedFileName}
+              onCloseViewer={closeFileViewer}
+              onNavigateVerify={(id) => {
+                setVerifyEvidenceId(id);
+                setActiveView("verify");
+              }}
+              onNavigateAccess={(id) => {
+                setSelectedEvidenceId(id);
+                setActiveView("access");
+              }}
+              onBack={() => setActiveView("evidence")}
+            />
+          )}
 
-<div className="card">
+          {activeView === "department" && (
+            <DepartmentAuthorityView
+              currentUser={currentUser}
+              backendConnected={backendConnected}
+              onNavigateAccess={(evId) => {
+                if (evId) setSelectedEvidenceId(evId);
+                setActiveView("access");
+              }}
+            />
+          )}
 
-  <div className="card-icon">
-    🔐
-  </div>
+          {activeView === "access" && (
+            <AccessManagementView
+              evidenceList={evidenceList}
+              initialEvidenceId={selectedEvidenceId}
+              onCheckViewAccess={handleCheckViewAccess}
+              onCheckDownloadAccess={handleCheckDownloadAccess}
+              onGrantViewAccess={handleGrantViewAccess}
+              onRevokeViewAccess={handleRevokeViewAccess}
+              onGrantDownloadAccess={handleGrantDownloadAccess}
+              onRevokeDownloadAccess={handleRevokeDownloadAccess}
+              viewStatus={accessViewStatus}
+              downloadStatus={accessDownloadStatus}
+              actionResult={accessActionResult}
+              loading={accessLoading}
+              error={accessError}
+              backendConnected={backendConnected}
+              currentUser={currentUser}
+              onBack={() => setActiveView("evidence")}
+              onNavigateHistory={(evId) => {
+                if (evId) setSelectedEvidenceId(evId);
+                setActiveView("history");
+              }}
+            />
+          )}
 
-  <h2>
-    Access Management
-  </h2>
+          {activeView === "history" && (
+            <AccessHistoryView
+              evidenceList={evidenceList}
+              initialEvidenceId={selectedEvidenceId}
+              onFetchHistory={handleFetchAccessHistory}
+              historyRecords={historyRecords}
+              loading={historyLoading}
+              error={historyError}
+              backendConnected={backendConnected}
+              currentUser={currentUser}
+              onBack={() => setActiveView("evidence")}
+            />
+          )}
 
-  <p>
-    Manage view and download permissions
-    for authorized evidence users.
-  </p>
+          {activeView === "profile" && (
+            <IdentityProfileView
+              currentUser={currentUser}
+              onRefreshUser={async () => {
+                try {
+                  const res = await getMeAPI();
+                  if (res?.status === "authenticated" && res?.user) {
+                    setCurrentUser(res.user);
+                    return res;
+                  }
+                } catch (e) {
+                  console.warn("Failed to refresh user:", e);
+                }
+              }}
+              onLogout={handleLogout}
+              onSwitchSuccess={(newOfficer) => {
+                setCurrentUser(newOfficer);
+                showToast(`Active session switched to ${newOfficer?.name || "officer"}.`, "success");
+              }}
+              onOpenLoginModal={() => setIsLoginModalOpen(true)}
+              backendConnected={backendConnected}
+            />
+          )}
 
-  <button
-    className="primary-button"
-    onClick={() => {
+          {activeView === "status" && (
+            <SystemStatusView
+              backendConnected={backendConnected}
+              blockchainConnected={blockchainConnected}
+              onRefreshHealth={checkHealthAndLoadData}
+              currentUser={currentUser}
+              onSwitchUserAddress={() => {
+                showToast(
+                  "Session Identity Locked: Local testnet accounts are for RPC diagnostics. Switch examiner by logging out and authenticating.",
+                  "warning"
+                );
+              }}
+            />
+          )}
+        </main>
+      </div>
 
-      closePanels();
-      setShowAccessManagement(true);
+      {/* Institutional Re-Authentication Modal */}
+      <LoginModal
+        isOpen={isLoginModalOpen}
+        onClose={() => setIsLoginModalOpen(false)}
+        onLoginSuccess={(newOfficer) => {
+          setCurrentUser(newOfficer);
+        }}
+        currentUser={currentUser}
+      />
 
-    }}
-  >
-    Manage Access
-  </button>
-
-</div>
-        </section>
-
-      </main>
-
+      {/* Global Forensic Operation Feedback Toast */}
+      <Toast toast={toast} onClose={() => setToast(null)} />
     </div>
   );
 }
-
-
-export default App;

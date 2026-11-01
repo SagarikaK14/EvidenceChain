@@ -456,6 +456,91 @@ def seed_demo_users(default_password=None):
     connection.close()
 
 
+def seed_demo_case_hierarchies():
+    """
+    Idempotently seeds reporting hierarchies for all 5 demo cases if case_assignments is empty.
+    """
+    connection = get_db()
+    cursor = connection.cursor()
+    cursor.execute("SELECT COUNT(*) as cnt FROM case_assignments WHERE assignment_status = 'ACTIVE'")
+    cnt_row = cursor.fetchone()
+    if cnt_row and cnt_row["cnt"] > 0:
+        connection.close()
+        return
+
+    cursor.execute("SELECT id, name, role, employee_id FROM users")
+    users = {r["employee_id"]: dict(r) for r in cursor.fetchall()}
+
+    sen = users.get("HOD-0001")
+    sharma = users.get("OFF-1024")
+    patel = users.get("OFF-2048")
+    rao = users.get("CUST-4096")
+    mehta = users.get("EXAM-512")
+
+    if not all([sen, sharma, patel, rao, mehta]):
+        connection.close()
+        return
+
+    hierarchies = [
+        {
+            "case_id": "CASE-2026-METRO-101",
+            "assignments": [
+                ("ASG-101-MEHTA", mehta["id"], "Lead Investigator", None, "Directs overall field search, coordinates judicial warrants, and leads interrogation interviews."),
+                ("ASG-101-SHARMA", sharma["id"], "Senior Forensic Officer", "ASG-101-MEHTA", "Supervises cloud server disk image acquisition and provides forensic cryptographic affidavits."),
+                ("ASG-101-PATEL", patel["id"], "Digital Forensics Analyst", "ASG-101-SHARMA", "Conducts deep packet flow analysis, reconstructs exfiltration timelines, and decodes encrypted channels."),
+                ("ASG-101-RAO", rao["id"], "Evidence Custodian", "ASG-101-MEHTA", "Maintains physical air-gap custody, manages cryptographic vault tokens, and tracks transfer manifests.")
+            ]
+        },
+        {
+            "case_id": "CASE-2026-METRO-102",
+            "assignments": [
+                ("ASG-102-SHARMA", sharma["id"], "Lead Forensic Examiner", None, "Principal technical investigator for counterfeit POS terminal extraction and bus tampering analysis."),
+                ("ASG-102-PATEL", patel["id"], "Digital Forensics Analyst", "ASG-102-SHARMA", "Disassembles tampered SPI flash binaries and identifies covert skimmer data exfiltration routines."),
+                ("ASG-102-MEHTA", mehta["id"], "Investigating Officer", "ASG-102-SHARMA", "Liaises with commercial banking victims, conducts retail site inspections, and secures CCTV records."),
+                ("ASG-102-RAO", rao["id"], "Evidence Custodian", "ASG-102-SHARMA", "Secures 14 seized point-of-sale terminals in Faraday isolation containers with tamper-evident seals.")
+            ]
+        },
+        {
+            "case_id": "CASE-2026-METRO-103",
+            "assignments": [
+                ("ASG-103-MEHTA", mehta["id"], "Lead Investigator", None, "Coordinates crash reconstruction team, vehicle impound preservation, and regulatory safety briefings."),
+                ("ASG-103-SHARMA", sharma["id"], "Senior Forensic Officer", "ASG-103-MEHTA", "Captures live CAN bus logs and audits electronic control unit (ECU) cryptographic signatures."),
+                ("ASG-103-PATEL", patel["id"], "Digital Forensics Analyst", "ASG-103-SHARMA", "Synchronizes time-series radar and camera sensor logs to identify millisecond timestamp tampering."),
+                ("ASG-103-RAO", rao["id"], "Evidence Custodian", "ASG-103-MEHTA", "Stores extracted vehicle black box storage modules in secure physical biometric lockers.")
+            ]
+        },
+        {
+            "case_id": "CASE-2026-METRO-104",
+            "assignments": [
+                ("ASG-104-SHARMA", sharma["id"], "Lead Investigator", None, "Supervises electrical grid substation intrusion response and coordinates forensic network isolation."),
+                ("ASG-104-PATEL", patel["id"], "Digital Forensics Analyst", "ASG-104-SHARMA", "Performs diffing of PLC ladder logic against baseline firmware and inspects Modbus traffic captures."),
+                ("ASG-104-RAO", rao["id"], "Evidence Custodian", "ASG-104-SHARMA", "Maintains chain of custody for emergency triage flash media and industrial serial tap recorders.")
+            ]
+        },
+        {
+            "case_id": "CASE-2026-M101",
+            "assignments": [
+                ("ASG-M101-MEHTA", mehta["id"], "Lead Investigator", None, "Primary investigative commander responsible for court dossier compilation and procedural compliance."),
+                ("ASG-M101-SHARMA", sharma["id"], "Senior Forensic Officer", "ASG-M101-MEHTA", "Conducts technical verification of forensic disk images and issues cryptographically anchored certificates."),
+                ("ASG-M101-PATEL", patel["id"], "Digital Forensics Analyst", "ASG-M101-SHARMA", "Extracts filesystem timeline artifacts and indexes registry user activity logs."),
+                ("ASG-M101-RAO", rao["id"], "Evidence Custodian", "ASG-M101-MEHTA", "Administers long-term cold storage cryptographic seals and physical evidence registry ledgers.")
+            ]
+        }
+    ]
+
+    for h in hierarchies:
+        case_id = h["case_id"]
+        for asg_id, u_id, role, reports_to, desc in h["assignments"]:
+            cursor.execute("""
+                INSERT OR REPLACE INTO case_assignments
+                (assignment_id, case_id, user_id, case_role, reports_to_assignment_id, responsibility_description, assignment_status, created_by, updated_by)
+                VALUES (?, ?, ?, ?, ?, ?, 'ACTIVE', 'Dr. Rajeshwar Sen (HOD-0001)', 'Dr. Rajeshwar Sen (HOD-0001)')
+            """, (asg_id, case_id, u_id, role, reports_to, desc))
+
+    connection.commit()
+    connection.close()
+
+
 # ============================================================
 # SAVE EVIDENCE
 # ============================================================

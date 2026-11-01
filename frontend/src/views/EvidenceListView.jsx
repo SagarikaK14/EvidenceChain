@@ -4,7 +4,7 @@
 // Focus on finding, inspecting, and managing evidence files & case dossiers
 // ============================================================
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { CryptographicFingerprint } from "../components/CryptographicFingerprint";
 import { getEvidenceStatus } from "../utils/statusLabels";
 import { formatISTDateTime } from "../utils/dateUtils";
@@ -16,19 +16,26 @@ export function EvidenceListView({
   onVerifyEvidence,
   onManageAccess,
   onNavigate,
+  loading = false,
+  error = null,
 }) {
   const [searchQuery, setSearchQuery] = useState("");
   const [activeFilter, setActiveFilter] = useState("ALL"); // ALL | HISTORICAL | ACTIVE | UNCONFIRMED | MY_INTAKE
+  const [selectedCase, setSelectedCase] = useState("ALL");
+  const [selectedType, setSelectedType] = useState("ALL");
+  const [selectedCustodian, setSelectedCustodian] = useState("ALL");
   const [copiedId, setCopiedId] = useState("");
   const [inspectItem, setInspectItem] = useState(null);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageSize, setPageSize] = useState(10); // 10 | 25 | "ALL"
 
   const handleCopy = (id, text, e) => {
-    e.stopPropagation();
-    navigator.clipboard.writeText(text);
-    setCopiedId(id);
-    setTimeout(() => setCopiedId(""), 1400);
+    if (e && e.stopPropagation) e.stopPropagation();
+    if (navigator?.clipboard?.writeText) {
+      navigator.clipboard.writeText(String(text || ""));
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(""), 1400);
+    }
   };
 
   const handleFilterChange = (filter) => {
@@ -41,56 +48,144 @@ export function EvidenceListView({
     setCurrentPage(1);
   };
 
-  // Filter evidence based on search query and category
-  const filteredList = (evidenceList || []).filter((item) => {
-    const q = searchQuery.toLowerCase().trim();
-    if (q) {
-      const matchId = item.evidenceId?.toLowerCase().includes(q);
-      const matchCase = item.caseId?.toLowerCase().includes(q);
-      const matchTitle = item.title?.toLowerCase().includes(q);
-      const matchDesc = item.description?.toLowerCase().includes(q);
-      const matchHash = item.sha256Hash?.toLowerCase().includes(q);
-      const matchFile = item.filePath?.toLowerCase().includes(q);
-      const matchCust = item.custodian?.toLowerCase().includes(q) || item.registeredBy?.toLowerCase().includes(q);
-      if (!matchId && !matchCase && !matchTitle && !matchDesc && !matchHash && !matchFile && !matchCust) {
+  const handleResetFilters = () => {
+    setSearchQuery("");
+    setActiveFilter("ALL");
+    setSelectedCase("ALL");
+    setSelectedType("ALL");
+    setSelectedCustodian("ALL");
+    setCurrentPage(1);
+  };
+
+  // Safe helper to inspect file extension / format
+  const getFileCategory = (item) => {
+    if (!item) return "OTHER";
+    const path = String(item.filePath || item.title || "").toLowerCase();
+    if (path.endsWith(".pdf")) return "PDF";
+    if (path.match(/\.(png|jpg|jpeg|gif|webp|svg)$/)) return "IMAGE";
+    if (path.match(/\.(csv|json|txt|log|xml)$/)) return "DATA_TEXT";
+    if (path.match(/\.(bin|raw|dd|pcap|hex|dat)$/)) return "BINARY_DUMP";
+    return "OTHER";
+  };
+
+  // Extract unique filter choices from current evidence items
+  const { availableCases, availableCustodians } = useMemo(() => {
+    const casesSet = new Set();
+    const custodiansSet = new Set();
+
+    (evidenceList || []).forEach((item) => {
+      if (item?.caseId) casesSet.add(String(item.caseId).trim());
+      if (item?.custodian) {
+        custodiansSet.add(String(item.custodian).trim());
+      } else if (item?.registeredBy) {
+        custodiansSet.add(String(item.registeredBy).trim());
+      }
+    });
+
+    return {
+      availableCases: Array.from(casesSet).sort(),
+      availableCustodians: Array.from(custodiansSet).sort(),
+    };
+  }, [evidenceList]);
+
+  // Robust, fail-safe filtering across all dimensions
+  const filteredList = useMemo(() => {
+    return (evidenceList || []).filter((item) => {
+      if (!item) return false;
+
+      const q = String(searchQuery || "").toLowerCase().trim();
+      if (q) {
+        const idMatch = String(item.evidenceId || "").toLowerCase().includes(q);
+        const caseMatch = String(item.caseId || "").toLowerCase().includes(q);
+        const titleMatch = String(item.title || "").toLowerCase().includes(q);
+        const descMatch = String(item.description || "").toLowerCase().includes(q);
+        const hashMatch = String(item.sha256Hash || "").toLowerCase().includes(q);
+        const fileMatch = String(item.filePath || "").toLowerCase().includes(q);
+        const custMatch =
+          String(item.custodian || "").toLowerCase().includes(q) ||
+          String(item.registeredBy || "").toLowerCase().includes(q);
+
+        if (!idMatch && !caseMatch && !titleMatch && !descMatch && !hashMatch && !fileMatch && !custMatch) {
+          return false;
+        }
+      }
+
+      // Case Docket filter
+      if (selectedCase !== "ALL" && String(item.caseId || "") !== selectedCase) {
         return false;
       }
-    }
 
-    const st = getEvidenceStatus(item);
+      // File Format / Type filter
+      if (selectedType !== "ALL") {
+        const cat = getFileCategory(item);
+        if (selectedType === "PDF" && cat !== "PDF") return false;
+        if (selectedType === "IMAGE" && cat !== "IMAGE") return false;
+        if (selectedType === "DATA_TEXT" && cat !== "DATA_TEXT") return false;
+        if (selectedType === "BINARY_DUMP" && cat !== "BINARY_DUMP") return false;
+      }
 
-    if (activeFilter === "ALL") return true;
-    if (activeFilter === "MY_INTAKE") {
-      return (
-        item.registeredBy?.toLowerCase() === currentUser?.walletAddress?.toLowerCase()
-      );
-    }
-    if (activeFilter === "ACTIVE") {
-      return st.code === "ACTIVE";
-    }
-    if (activeFilter === "HISTORICAL") {
-      return st.code === "HISTORICAL";
-    }
-    if (activeFilter === "UNCONFIRMED") {
-      return st.code === "UNCONFIRMED";
-    }
+      // Custodian filter
+      if (selectedCustodian !== "ALL") {
+        const itemCust = String(item.custodian || item.registeredBy || "").trim();
+        if (itemCust !== selectedCustodian) return false;
+      }
 
-    return true;
-  });
+      // Status Tabs filter
+      const st = getEvidenceStatus(item);
+      if (activeFilter === "ALL") return true;
+      if (activeFilter === "MY_INTAKE") {
+        const regBy = String(item.registeredBy || "").toLowerCase();
+        const userWallet = String(currentUser?.walletAddress || "").toLowerCase();
+        const userEmail = String(currentUser?.email || "").toLowerCase();
+        const userEmpId = String(currentUser?.employeeId || "").toLowerCase();
+        return (
+          (userWallet && regBy.includes(userWallet)) ||
+          (userEmail && regBy.includes(userEmail)) ||
+          (userEmpId && regBy.includes(userEmpId))
+        );
+      }
+      if (activeFilter === "ACTIVE") {
+        return st?.code === "ACTIVE";
+      }
+      if (activeFilter === "HISTORICAL") {
+        return st?.code === "HISTORICAL";
+      }
+      if (activeFilter === "UNCONFIRMED") {
+        return st?.code === "UNCONFIRMED";
+      }
+
+      return true;
+    });
+  }, [evidenceList, searchQuery, activeFilter, selectedCase, selectedType, selectedCustodian, currentUser]);
 
   const totalCount = evidenceList?.length || 0;
-  const activeCount = (evidenceList || []).filter((i) => getEvidenceStatus(i).code === "ACTIVE").length;
-  const historicalCount = (evidenceList || []).filter((i) => getEvidenceStatus(i).code === "HISTORICAL").length;
-  const unconfirmedCount = (evidenceList || []).filter((i) => getEvidenceStatus(i).code === "UNCONFIRMED").length;
-  const myIntakeCount = (evidenceList || []).filter(
-    (i) => i.registeredBy?.toLowerCase() === currentUser?.walletAddress?.toLowerCase()
-  ).length;
+  const activeCount = useMemo(
+    () => (evidenceList || []).filter((i) => getEvidenceStatus(i)?.code === "ACTIVE").length,
+    [evidenceList]
+  );
+  const historicalCount = useMemo(
+    () => (evidenceList || []).filter((i) => getEvidenceStatus(i)?.code === "HISTORICAL").length,
+    [evidenceList]
+  );
+  const unconfirmedCount = useMemo(
+    () => (evidenceList || []).filter((i) => getEvidenceStatus(i)?.code === "UNCONFIRMED").length,
+    [evidenceList]
+  );
+  const myIntakeCount = useMemo(() => {
+    const userWallet = String(currentUser?.walletAddress || "").toLowerCase();
+    const userEmail = String(currentUser?.email || "").toLowerCase();
+    return (evidenceList || []).filter((i) => {
+      const regBy = String(i?.registeredBy || "").toLowerCase();
+      return (userWallet && regBy.includes(userWallet)) || (userEmail && regBy.includes(userEmail));
+    }).length;
+  }, [evidenceList, currentUser]);
 
   const quickTags = [
-    { label: "Case 2024-001", query: "CASE-2024-001" },
-    { label: "Case 2024-002", query: "CASE-2024-002" },
+    { label: "Operation Nightfall", query: "CASE-2026-METRO-101" },
+    { label: "Payment Terminals", query: "CASE-2026-METRO-102" },
     { label: "PDF Documents", query: ".pdf" },
-    { label: "Disk Images", query: ".raw" },
+    { label: "Scene Images", query: ".png" },
+    { label: "Data Timelines", query: ".csv" },
   ];
 
   // Pagination Calculations
@@ -104,7 +199,7 @@ export function EvidenceListView({
   const paginatedList = isAll ? filteredList : filteredList.slice(startIndex, endIndex);
 
   return (
-    <div className="view-container">
+    <div className="view-container" data-testid="evidence-repository-container">
       {/* 1. Page Header Block */}
       <div className="page-header-block" style={{ marginBottom: "16px" }}>
         <div>
@@ -127,8 +222,9 @@ export function EvidenceListView({
           <button
             type="button"
             className="btn-tactile-primary"
-            onClick={() => onNavigate("register")}
+            onClick={() => onNavigate && onNavigate("register")}
             style={{ fontSize: "12px", padding: "8px 16px" }}
+            id="btn-register-new-artifact"
           >
             + Register New Artifact
           </button>
@@ -141,27 +237,31 @@ export function EvidenceListView({
           type="button"
           className={`folder-tab-btn ${activeFilter === "ALL" ? "tab-active" : ""}`}
           onClick={() => handleFilterChange("ALL")}
+          id="tab-filter-all"
         >
           All Dossiers ({totalCount})
         </button>
         <button
           type="button"
-          className={`folder-tab-btn ${activeFilter === "HISTORICAL" ? "tab-active" : ""}`}
-          onClick={() => handleFilterChange("HISTORICAL")}
-        >
-          Historical Registrations ({historicalCount})
-        </button>
-        <button
-          type="button"
           className={`folder-tab-btn ${activeFilter === "ACTIVE" ? "tab-active" : ""}`}
           onClick={() => handleFilterChange("ACTIVE")}
+          id="tab-filter-active"
         >
           Verified Registrations ({activeCount})
         </button>
         <button
           type="button"
+          className={`folder-tab-btn ${activeFilter === "HISTORICAL" ? "tab-active" : ""}`}
+          onClick={() => handleFilterChange("HISTORICAL")}
+          id="tab-filter-historical"
+        >
+          Historical Registrations ({historicalCount})
+        </button>
+        <button
+          type="button"
           className={`folder-tab-btn ${activeFilter === "UNCONFIRMED" ? "tab-active" : ""}`}
           onClick={() => handleFilterChange("UNCONFIRMED")}
+          id="tab-filter-unconfirmed"
         >
           Registration Not Confirmed ({unconfirmedCount})
         </button>
@@ -169,15 +269,16 @@ export function EvidenceListView({
           type="button"
           className={`folder-tab-btn ${activeFilter === "MY_INTAKE" ? "tab-active" : ""}`}
           onClick={() => handleFilterChange("MY_INTAKE")}
+          id="tab-filter-my-intake"
         >
           My Intakes ({myIntakeCount})
         </button>
       </div>
 
-      {/* 3. Search and Quick Tags Bar */}
+      {/* 3. Search and Multi-Dimensional Filter Bar */}
       <div className="doc-panel" style={{ padding: "14px 18px", marginBottom: "16px" }}>
         <div style={{ display: "flex", gap: "12px", flexWrap: "wrap", alignItems: "center" }}>
-          <div style={{ flex: 1, minWidth: "260px", position: "relative" }}>
+          <div style={{ flex: 1.5, minWidth: "260px", position: "relative" }}>
             <input
               type="text"
               className="search-input-tactile"
@@ -185,6 +286,7 @@ export function EvidenceListView({
               value={searchQuery}
               onChange={(e) => handleSearchChange(e.target.value)}
               style={{ width: "100%", padding: "8px 12px", fontSize: "12.5px" }}
+              id="input-evidence-search"
             />
             {searchQuery && (
               <button
@@ -201,350 +303,428 @@ export function EvidenceListView({
                   cursor: "pointer",
                   fontSize: "12px",
                 }}
+                aria-label="Clear search input"
               >
                 Clear [×]
               </button>
             )}
           </div>
 
-          <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap" }}>
-            <span style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 600 }}>Quick Filters:</span>
-            {quickTags.map((tag) => (
-              <button
-                key={tag.label}
-                type="button"
-                className="chip-tag"
-                style={{
-                  fontSize: "11px",
-                  padding: "3px 8px",
-                  backgroundColor: searchQuery === tag.query ? "var(--green-institutional)" : "var(--surface-primary)",
-                  color: searchQuery === tag.query ? "#FAF7F2" : "var(--text-secondary)",
-                  border: "1px solid var(--border-color)",
-                  borderRadius: "3px",
-                  cursor: "pointer",
-                }}
-                onClick={() => handleSearchChange(searchQuery === tag.query ? "" : tag.query)}
-              >
-                {tag.label}
-              </button>
-            ))}
+          {/* Filter: Case Docket */}
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <label htmlFor="select-filter-case" style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 600 }}>
+              Case:
+            </label>
+            <select
+              id="select-filter-case"
+              value={selectedCase}
+              onChange={(e) => {
+                setSelectedCase(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="dropdown-tactile"
+              style={{ padding: "6px 10px", fontSize: "11.5px" }}
+            >
+              <option value="ALL">All Cases ({availableCases.length})</option>
+              {availableCases.map((c) => (
+                <option key={c} value={c}>
+                  {c}
+                </option>
+              ))}
+            </select>
           </div>
-        </div>
-      </div>
 
-      {/* 4. Desktop Master Archival Table */}
-      <div className="desktop-table-container archival-table-desktop">
-        {filteredList.length === 0 ? (
-          <div className="doc-panel" style={{ padding: "40px", textAlign: "center" }}>
-            <p style={{ fontWeight: 600, color: "var(--text-primary)" }}>No Evidence Matches Filter</p>
-            <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>
-              No dossiers match query "{searchQuery}" under the selected tab.
-            </p>
+          {/* Filter: Evidence Format / Type */}
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <label htmlFor="select-filter-type" style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 600 }}>
+              Format:
+            </label>
+            <select
+              id="select-filter-type"
+              value={selectedType}
+              onChange={(e) => {
+                setSelectedType(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="dropdown-tactile"
+              style={{ padding: "6px 10px", fontSize: "11.5px" }}
+            >
+              <option value="ALL">All Formats</option>
+              <option value="PDF">PDF Reports (.pdf)</option>
+              <option value="IMAGE">Scene Images (.png, .jpg)</option>
+              <option value="DATA_TEXT">Data & Timelines (.csv, .json, .txt)</option>
+              <option value="BINARY_DUMP">Raw Disk / Binary (.bin, .pcap, .dd)</option>
+            </select>
+          </div>
+
+          {/* Filter: Custodian / Registering Personnel */}
+          <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+            <label htmlFor="select-filter-custodian" style={{ fontSize: "11px", color: "var(--text-muted)", fontWeight: 600 }}>
+              Custodian:
+            </label>
+            <select
+              id="select-filter-custodian"
+              value={selectedCustodian}
+              onChange={(e) => {
+                setSelectedCustodian(e.target.value);
+                setCurrentPage(1);
+              }}
+              className="dropdown-tactile"
+              style={{ padding: "6px 10px", fontSize: "11.5px" }}
+            >
+              <option value="ALL">All Personnel</option>
+              {availableCustodians.map((cust) => (
+                <option key={cust} value={cust}>
+                  {cust.length > 28 ? cust.slice(0, 12) + "..." + cust.slice(-8) : cust}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {(searchQuery || selectedCase !== "ALL" || selectedType !== "ALL" || selectedCustodian !== "ALL" || activeFilter !== "ALL") && (
             <button
               type="button"
               className="btn-tactile-secondary"
-              style={{ marginTop: "12px", fontSize: "11.5px" }}
-              onClick={() => {
-                handleSearchChange("");
-                handleFilterChange("ALL");
-              }}
+              onClick={handleResetFilters}
+              style={{ fontSize: "11px", padding: "6px 10px" }}
+              title="Reset all active filters"
             >
-              Reset All Filters
+              Reset Filters
             </button>
-          </div>
-        ) : (
-          <div className="table-wrapper-archival doc-panel" style={{ padding: 0 }}>
-            <table className="archival-table" style={{ width: "100%" }}>
-              <thead>
-                <tr>
-                  <th style={{ width: "135px" }}>Case Docket</th>
-                  <th style={{ width: "130px" }}>Evidence ID</th>
-                  <th>File Name & Title</th>
-                  <th style={{ width: "180px" }}>Fingerprint (SHA-256)</th>
-                  <th style={{ width: "165px" }}>Registration Status</th>
-                  <th style={{ width: "150px" }}>Intake Timestamp</th>
-                  <th style={{ width: "160px", textAlign: "right" }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {paginatedList.map((item) => {
-                  const st = getEvidenceStatus(item);
-                  return (
-                    <tr
-                      key={item.evidenceId}
-                      onClick={() => setInspectItem(item)}
-                      style={{
-                        cursor: "pointer",
-                        backgroundColor: inspectItem?.evidenceId === item.evidenceId ? "rgba(40, 122, 88, 0.05)" : "transparent",
-                      }}
-                      title="Click row to open quick-inspect drawer"
-                    >
-                      <td>
-                        <span className="case-docket-tag">{item.caseId}</span>
-                      </td>
-                      <td>
-                        <span className="mono-identifier" style={{ fontWeight: 600 }}>
-                          {item.evidenceId}
-                        </span>
-                      </td>
-                      <td style={{ fontWeight: 500 }}>
-                        <div style={{ color: "var(--text-primary)" }}>{item.title}</div>
-                        {item.filePath && (
-                          <div style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-muted)", marginTop: "2px" }}>
-                            {item.filePath.split("/").pop()}
-                          </div>
-                        )}
-                      </td>
-                      <td>
-                        <span className="hash-preview-chip">
-                          <span>
-                            {item.sha256Hash
-                              ? `${item.sha256Hash.slice(0, 10)}...${item.sha256Hash.slice(-8)}`
-                              : "—"}
+          )}
+        </div>
+
+        {/* Quick Tag Pills */}
+        <div style={{ display: "flex", gap: "6px", alignItems: "center", flexWrap: "wrap", marginTop: "10px", paddingTop: "10px", borderTop: "1px dashed var(--border-color)" }}>
+          <span style={{ fontSize: "10.5px", color: "var(--text-muted)", fontWeight: 600 }}>Quick Filters:</span>
+          {quickTags.map((tag) => (
+            <button
+              key={tag.label}
+              type="button"
+              className="chip-tag"
+              style={{
+                fontSize: "10.5px",
+                padding: "2px 8px",
+                backgroundColor: searchQuery === tag.query ? "var(--green-institutional)" : "var(--surface-primary)",
+                color: searchQuery === tag.query ? "#FAF7F2" : "var(--text-secondary)",
+                border: "1px solid var(--border-color)",
+                borderRadius: "3px",
+                cursor: "pointer",
+              }}
+              onClick={() => handleSearchChange(searchQuery === tag.query ? "" : tag.query)}
+            >
+              {tag.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* 4. Loading State */}
+      {loading && (
+        <div className="doc-panel" style={{ padding: "40px", textAlign: "center" }}>
+          <div className="loading-spinner" style={{ margin: "0 auto 12px auto" }} />
+          <p style={{ fontWeight: 600, color: "var(--text-primary)" }}>Loading Evidence Repository...</p>
+          <p style={{ fontSize: "12px", color: "var(--text-secondary)", marginTop: "4px" }}>
+            Reconciling SQLite catalog with active verification ledger.
+          </p>
+        </div>
+      )}
+
+      {/* 5. Error State */}
+      {error && !loading && (
+        <div className="doc-panel" style={{ padding: "24px", border: "1px solid #E05252", backgroundColor: "#FDF2F2" }}>
+          <h3 style={{ fontSize: "14px", color: "#C81E1E", margin: 0 }}>Evidentiary Vault Synchronization Notice</h3>
+          <p style={{ fontSize: "12.5px", color: "#771D1D", marginTop: "6px" }}>{String(error)}</p>
+          <button
+            type="button"
+            className="btn-tactile-secondary"
+            onClick={handleResetFilters}
+            style={{ marginTop: "12px", fontSize: "11px" }}
+          >
+            Retry Repository Query
+          </button>
+        </div>
+      )}
+
+      {/* 6. Desktop Master Archival Table */}
+      {!loading && (
+        <div className="desktop-table-container archival-table-desktop">
+          {filteredList.length === 0 ? (
+            <div className="doc-panel" style={{ padding: "40px", textAlign: "center" }}>
+              <p style={{ fontWeight: 600, color: "var(--text-primary)" }}>No Evidence Matches Current Criteria</p>
+              <p style={{ fontSize: "13px", color: "var(--text-secondary)", marginTop: "4px" }}>
+                Zero dossiers match the selected filters across case, status, format, and search query.
+              </p>
+              <button
+                type="button"
+                className="btn-tactile-secondary"
+                style={{ marginTop: "14px", fontSize: "11.5px" }}
+                onClick={handleResetFilters}
+              >
+                Reset All Filters ({totalCount} Total Items)
+              </button>
+            </div>
+          ) : (
+            <div className="table-wrapper-archival doc-panel" style={{ padding: 0 }}>
+              <table className="archival-table" style={{ width: "100%" }}>
+                <thead>
+                  <tr>
+                    <th style={{ width: "145px" }}>Case Docket</th>
+                    <th style={{ width: "130px" }}>Evidence ID</th>
+                    <th>File Name & Title</th>
+                    <th style={{ width: "185px" }}>Fingerprint (SHA-256)</th>
+                    <th style={{ width: "165px" }}>Registration Status</th>
+                    <th style={{ width: "155px" }}>Intake Timestamp</th>
+                    <th style={{ width: "165px", textAlign: "right" }}>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginatedList.map((item) => {
+                    const st = getEvidenceStatus(item);
+                    const fileName = String(item.title || (item.filePath ? item.filePath.split("/").pop() : "evidence_payload.bin"));
+                    return (
+                      <tr
+                        key={item.evidenceId || Math.random()}
+                        onClick={() => setInspectItem(item)}
+                        style={{
+                          cursor: "pointer",
+                          backgroundColor: inspectItem?.evidenceId === item.evidenceId ? "rgba(40, 122, 88, 0.05)" : "transparent",
+                        }}
+                        title="Click row to open quick-inspect drawer"
+                      >
+                        <td>
+                          <span className="case-docket-tag">{item.caseId || "UNASSIGNED"}</span>
+                        </td>
+                        <td>
+                          <span className="mono-identifier" style={{ fontWeight: 600 }}>
+                            {item.evidenceId}
                           </span>
-                          {item.sha256Hash && (
+                        </td>
+                        <td style={{ fontWeight: 500 }}>
+                          <div style={{ color: "var(--text-primary)" }}>{item.title || fileName}</div>
+                          {item.filePath && (
+                            <div style={{ fontFamily: "var(--font-mono)", fontSize: "10px", color: "var(--text-muted)", marginTop: "2px" }}>
+                              {String(item.filePath).split("/").pop()}
+                            </div>
+                          )}
+                        </td>
+                        <td>
+                          <span className="hash-preview-chip">
+                            <span>
+                              {item.sha256Hash
+                                ? `${String(item.sha256Hash).slice(0, 10)}...${String(item.sha256Hash).slice(-8)}`
+                                : "—"}
+                            </span>
+                            {item.sha256Hash && (
+                              <button
+                                type="button"
+                                className="btn-subtle-mono"
+                                style={{ padding: "1px 5px", fontSize: "10px" }}
+                                onClick={(e) => handleCopy(item.evidenceId, item.sha256Hash, e)}
+                                title="Copy full 64-character SHA-256 hash"
+                              >
+                                {copiedId === item.evidenceId ? "COPIED" : "COPY"}
+                              </button>
+                            )}
+                          </span>
+                        </td>
+                        <td>
+                          <span className={st?.pillClass || "badge-clean"} style={{ ...(st?.badgeStyle || {}), fontSize: "10.5px", padding: "2px 8px" }}>
+                            {st?.label || "Catalogued"}
+                          </span>
+                        </td>
+                        <td style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-secondary)" }}>
+                          {formatISTDateTime(item.createdAt)}
+                        </td>
+                        <td style={{ textAlign: "right" }}>
+                          <div style={{ display: "inline-flex", gap: "6px" }}>
                             <button
                               type="button"
-                              className="btn-subtle-mono"
-                              style={{ padding: "1px 5px", fontSize: "10px" }}
-                              onClick={(e) => handleCopy(item.evidenceId, item.sha256Hash, e)}
-                              title="Copy full 64-character SHA-256 hash"
+                              className="btn-tactile-secondary"
+                              style={{ padding: "4px 8px", fontSize: "10.5px" }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setInspectItem(item);
+                              }}
+                              title="Quick inspect in slide-over drawer"
                             >
-                              {copiedId === item.evidenceId ? "COPIED" : "COPY"}
+                              Inspect
                             </button>
-                          )}
-                        </span>
-                      </td>
-                      <td>
-                        <span className={st.pillClass} style={{ ...st.badgeStyle, fontSize: "10.5px", padding: "2px 8px" }}>
-                          {st.label}
-                        </span>
-                      </td>
-                      <td style={{ fontFamily: "var(--font-mono)", fontSize: "11px", color: "var(--text-secondary)" }}>
-                        {formatISTDateTime(item.createdAt)}
-                      </td>
-                      <td style={{ textAlign: "right" }}>
-                        <div style={{ display: "inline-flex", gap: "6px" }}>
-                          <button
-                            type="button"
-                            className="btn-tactile-secondary"
-                            style={{ padding: "4px 8px", fontSize: "10.5px" }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              setInspectItem(item);
-                            }}
-                            title="Quick inspect in slide-over drawer"
-                          >
-                            Inspect
-                          </button>
-                          <button
-                            type="button"
-                            className="btn-tactile-primary"
-                            style={{ padding: "4px 8px", fontSize: "10.5px" }}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onSelectEvidence(item.evidenceId);
-                            }}
-                            title="Open full evidentiary dossier"
-                          >
-                            Dossier →
-                          </button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
+                            <button
+                              type="button"
+                              className="btn-tactile-primary"
+                              style={{ padding: "4px 8px", fontSize: "10.5px" }}
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (onSelectEvidence) onSelectEvidence(item.evidenceId);
+                              }}
+                              title="Open full evidentiary dossier"
+                            >
+                              Dossier →
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
 
-      {/* 5. Mobile Responsive Dossier Cards (Visible <= 768px) */}
-      <div className="mobile-cards-container archival-cards-mobile">
-        {paginatedList.map((item) => {
-          const st = getEvidenceStatus(item);
-          return (
-            <div key={item.evidenceId} className="mobile-dossier-card ambient-card" style={{ marginBottom: "10px", padding: "12px 14px" }}>
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "6px" }}>
-                <div>
-                  <span className="case-docket-tag">{item.caseId}</span>
-                  <span className="mono-identifier" style={{ marginLeft: "6px", fontWeight: 600 }}>
-                    {item.evidenceId}
+      {/* 7. Mobile Responsive Dossier Cards (Visible <= 768px) */}
+      {!loading && (
+        <div className="mobile-cards-container archival-cards-mobile">
+          {paginatedList.map((item) => {
+            const st = getEvidenceStatus(item);
+            return (
+              <div key={item.evidenceId || Math.random()} className="mobile-dossier-card ambient-card" style={{ marginBottom: "10px", padding: "12px 14px" }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: "6px" }}>
+                  <div>
+                    <span className="case-docket-tag">{item.caseId}</span>
+                    <span className="mono-identifier" style={{ marginLeft: "6px", fontWeight: 600 }}>
+                      {item.evidenceId}
+                    </span>
+                  </div>
+                  <span className={st?.pillClass} style={{ ...(st?.badgeStyle || {}), fontSize: "9.5px", padding: "2px 6px" }}>
+                    {st?.shortLabel}
                   </span>
                 </div>
-                <span className={st.pillClass} style={{ ...st.badgeStyle, fontSize: "9.5px", padding: "2px 6px" }}>
-                  {st.shortLabel}
-                </span>
-              </div>
 
-              <div style={{ fontWeight: 600, fontSize: "13.5px", color: "var(--text-primary)", marginBottom: "4px" }}>
-                {item.title}
-              </div>
-
-              {item.description && (
-                <p style={{ fontSize: "11.5px", color: "var(--text-secondary)", margin: "0 0 6px 0", lineHeight: 1.35, overflow: "hidden", textOverflow: "ellipsis", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" }}>
-                  {item.description}
-                </p>
-              )}
-
-              <div style={{ padding: "6px 8px", background: "var(--surface-primary)", border: "1px solid var(--border-subtle)", borderRadius: "3px", marginBottom: "8px" }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "2px" }}>
-                  <span style={{ fontSize: "9.5px", color: "var(--text-muted)", fontFamily: "var(--font-mono)" }}>SHA-256 FINGERPRINT</span>
-                  {item.sha256Hash && (
-                    <button
-                      type="button"
-                      className="btn-subtle-mono"
-                      style={{ fontSize: "9.5px", padding: "1px 5px" }}
-                      onClick={(e) => handleCopy(item.evidenceId, item.sha256Hash, e)}
-                    >
-                      {copiedId === item.evidenceId ? "COPIED" : "COPY"}
-                    </button>
-                  )}
+                <div style={{ fontSize: "13px", fontWeight: 600, color: "var(--text-primary)", marginBottom: "4px" }}>
+                  {item.title}
                 </div>
-                <code style={{ fontSize: "10px", wordBreak: "break-all", fontFamily: "var(--font-mono)", color: "var(--text-primary)" }}>
-                  {item.sha256Hash ? `${item.sha256Hash.slice(0, 16)}...${item.sha256Hash.slice(-12)}` : "—"}
-                </code>
-              </div>
 
-              <div style={{ display: "flex", gap: "6px", justifyContent: "flex-end" }}>
-                <button
-                  type="button"
-                  className="btn-tactile-secondary"
-                  style={{ fontSize: "11px", padding: "5px 10px", minHeight: "32px" }}
-                  onClick={() => onVerifyEvidence(item.evidenceId)}
-                >
-                  Verify
-                </button>
-                <button
-                  type="button"
-                  className="btn-tactile-secondary"
-                  style={{ fontSize: "11px", padding: "5px 10px", minHeight: "32px" }}
-                  onClick={() => onManageAccess(item.evidenceId)}
-                >
-                  Access
-                </button>
-                <button
-                  type="button"
-                  className="btn-tactile-primary"
-                  style={{ fontSize: "11px", padding: "5px 12px", minHeight: "32px" }}
-                  onClick={() => onSelectEvidence(item.evidenceId)}
-                >
-                  Dossier →
-                </button>
-              </div>
-            </div>
-          );
-        })}
-      </div>
+                {item.description && (
+                  <p style={{ fontSize: "11.5px", color: "var(--text-secondary)", margin: "0 0 6px 0", lineHeight: 1.3 }}>
+                    {item.description}
+                  </p>
+                )}
 
-      {/* 6. Institutional Repository Pagination */}
-      {filteredList.length > 0 && (
-        <div className="pagination-bar-archival" data-testid="repository-pagination-bar">
-          <div className="pagination-meta-info">
-            Showing <strong className="font-mono">{totalFiltered === 0 ? 0 : startIndex + 1}</strong> –{" "}
-            <strong className="font-mono">{endIndex}</strong> of{" "}
-            <strong className="font-mono">{totalFiltered}</strong> catalogued dossiers
-            {totalFiltered < totalCount && (
-              <span className="pagination-filtered-note"> (filtered from {totalCount} total)</span>
-            )}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", fontSize: "11px", color: "var(--text-muted)", marginTop: "8px", paddingTop: "6px", borderTop: "1px solid var(--border-subtle)" }}>
+                  <span style={{ fontFamily: "var(--font-mono)" }}>{formatISTDateTime(item.createdAt)}</span>
+                  <button
+                    type="button"
+                    className="btn-tactile-primary"
+                    style={{ padding: "4px 10px", fontSize: "11px" }}
+                    onClick={() => onSelectEvidence && onSelectEvidence(item.evidenceId)}
+                  >
+                    Open Dossier →
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* 8. Pagination Strip */}
+      {totalFiltered > 0 && (
+        <div
+          className="doc-panel"
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            padding: "10px 16px",
+            marginTop: "12px",
+            fontSize: "12px",
+            color: "var(--text-secondary)",
+            flexWrap: "wrap",
+            gap: "8px",
+          }}
+        >
+          <div>
+            Showing <strong style={{ color: "var(--text-primary)" }}>{startIndex + 1}</strong> to{" "}
+            <strong style={{ color: "var(--text-primary)" }}>{endIndex}</strong> of{" "}
+            <strong style={{ color: "var(--text-primary)" }}>{totalFiltered}</strong> dossiers
+            {totalFiltered !== totalCount && ` (filtered from ${totalCount} total)`}
           </div>
 
-          <div className="pagination-controls-group">
-            <button
-              type="button"
-              className="btn-pagination-nav"
-              disabled={safePage <= 1}
-              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
-              aria-label="Previous page"
-              data-testid="btn-pagination-prev"
-            >
-              ← Prev
-            </button>
-
-            <div className="pagination-page-chips">
-              {Array.from({ length: totalPages }, (_, idx) => idx + 1).map((pNum) => (
-                <button
-                  key={pNum}
-                  type="button"
-                  className={`pagination-page-chip ${safePage === pNum ? "active-page" : ""}`}
-                  onClick={() => setCurrentPage(pNum)}
-                  data-testid={`btn-page-${pNum}`}
-                >
-                  {pNum}
-                </button>
-              ))}
-            </div>
-
-            <button
-              type="button"
-              className="btn-pagination-nav"
-              disabled={safePage >= totalPages}
-              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
-              aria-label="Next page"
-              data-testid="btn-pagination-next"
-            >
-              Next →
-            </button>
-          </div>
-
-          <div className="pagination-density-picker">
-            <span className="density-label">Per page:</span>
-            {[10, 25, "ALL"].map((size) => (
-              <button
-                key={size}
-                type="button"
-                className={`density-pill ${pageSize === size ? "active-density" : ""}`}
-                onClick={() => {
-                  setPageSize(size);
+          <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: "4px" }}>
+              <span>Per Page:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(e.target.value === "ALL" ? "ALL" : Number(e.target.value));
                   setCurrentPage(1);
                 }}
-                data-testid={`btn-density-${size}`}
+                className="dropdown-tactile"
+                style={{ padding: "2px 6px", fontSize: "11px" }}
               >
-                {size === "ALL" ? "All" : size}
-              </button>
-            ))}
+                <option value={10}>10</option>
+                <option value={25}>25</option>
+                <option value="ALL">All ({totalFiltered})</option>
+              </select>
+            </div>
+
+            {!isAll && totalPages > 1 && (
+              <div style={{ display: "flex", gap: "4px" }}>
+                <button
+                  type="button"
+                  className="btn-tactile-secondary"
+                  disabled={safePage <= 1}
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  style={{ padding: "3px 8px", fontSize: "11px" }}
+                >
+                  ← Prev
+                </button>
+                <span style={{ padding: "3px 8px", fontFamily: "var(--font-mono)" }}>
+                  {safePage} / {totalPages}
+                </span>
+                <button
+                  type="button"
+                  className="btn-tactile-secondary"
+                  disabled={safePage >= totalPages}
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  style={{ padding: "3px 8px", fontSize: "11px" }}
+                >
+                  Next →
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {/* 6. Contextual Quick-Inspect Slide-Over Drawer */}
+      {/* 9. Slide-Over Quick Inspect Drawer */}
       {inspectItem && (
         <div
+          className="inspect-drawer-overlay doc-panel"
           style={{
             position: "fixed",
             top: 0,
             right: 0,
             bottom: 0,
             width: "420px",
-            maxWidth: "90vw",
-            backgroundColor: "#FAF7F2",
-            borderLeft: "2px solid var(--green-institutional)",
-            boxShadow: "-8px 0 24px rgba(0,0,0,0.15)",
+            maxWidth: "92vw",
             zIndex: 1000,
-            padding: "24px 20px",
-            overflowY: "auto",
+            boxShadow: "-8px 0 32px rgba(0, 0, 0, 0.2)",
             display: "flex",
             flexDirection: "column",
-            justifyContent: "space-between",
-            animation: "slideInRight 0.2s cubic-bezier(0.16, 1, 0.3, 1)",
+            backgroundColor: "var(--surface-primary)",
+            padding: "20px",
+            boxSizing: "border-box",
           }}
         >
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", borderBottom: "1px solid var(--border-subtle)", paddingBottom: "10px" }}>
-              <span style={{ fontSize: "11px", fontWeight: 600, color: "var(--green-deep)", textTransform: "uppercase" }}>
-                Contextual Dossier Inspector
-              </span>
-              <button
-                type="button"
-                className="btn-subtle-mono"
-                onClick={() => setInspectItem(null)}
-                style={{ fontSize: "12px", padding: "2px 8px" }}
-              >
-                CLOSE [×]
-              </button>
-            </div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "16px", paddingBottom: "12px", borderBottom: "1px solid var(--border-subtle)" }}>
+            <span style={{ fontSize: "11px", fontWeight: 700, letterSpacing: "0.5px", color: "var(--green-institutional)" }}>
+              QUICK INSPECT DOSSIER
+            </span>
+            <button
+              type="button"
+              className="btn-tactile-secondary"
+              onClick={() => setInspectItem(null)}
+              style={{ padding: "4px 10px", fontSize: "11px" }}
+            >
+              Close [×]
+            </button>
+          </div>
 
+          <div style={{ flex: 1, overflowY: "auto", paddingRight: "4px" }}>
             <div style={{ marginBottom: "16px" }}>
               <div style={{ display: "flex", alignItems: "center", gap: "8px", marginBottom: "6px" }}>
                 <span className="case-docket-tag">{inspectItem.caseId}</span>
@@ -570,19 +750,19 @@ export function EvidenceListView({
               />
             </div>
 
-            {/* Quick Metadata Grid */}
+            {/* Metadata Details */}
             {(() => {
               const st = getEvidenceStatus(inspectItem);
-              const fileName = inspectItem.filePath ? inspectItem.filePath.split("/").pop() : "evidence_payload.bin";
+              const fileName = String(inspectItem.filePath || inspectItem.title || "evidence_payload.bin").split("/").pop();
               return (
                 <div style={{ display: "grid", gap: "8px", fontSize: "11.5px", marginBottom: "16px" }}>
                   <div style={{ padding: "8px 10px", background: "var(--surface-primary)", border: "1px solid var(--border-color)", borderRadius: "3px" }}>
                     <div style={{ fontSize: "10px", color: "var(--text-muted)", textTransform: "uppercase" }}>Registration Status</div>
-                    <div style={{ fontWeight: 600, marginTop: "2px", color: st.dotColor }}>
-                      {st.label}
+                    <div style={{ fontWeight: 600, marginTop: "2px", color: st?.dotColor }}>
+                      {st?.label}
                     </div>
                     <div style={{ fontSize: "10.5px", color: "var(--text-secondary)", marginTop: "2px" }}>
-                      {st.summary}
+                      {st?.summary}
                     </div>
                   </div>
 
@@ -603,7 +783,7 @@ export function EvidenceListView({
                   <div style={{ padding: "8px 10px", background: "var(--surface-primary)", border: "1px solid var(--border-color)", borderRadius: "3px" }}>
                     <div style={{ fontSize: "10px", color: "var(--text-muted)", textTransform: "uppercase" }}>Custodian Examiner</div>
                     <div style={{ fontWeight: 500, marginTop: "2px", color: "var(--text-primary)" }}>
-                      {inspectItem.custodian || "Forensic Officer Rahul Sharma (OFF-1024)"}
+                      {inspectItem.custodian || String(inspectItem.registeredBy || "Forensic Custody Officer")}
                     </div>
                   </div>
                 </div>
@@ -617,7 +797,7 @@ export function EvidenceListView({
               className="btn-tactile-secondary"
               style={{ flex: 1, fontSize: "11.5px", padding: "8px" }}
               onClick={() => {
-                onVerifyEvidence(inspectItem.evidenceId);
+                if (onVerifyEvidence) onVerifyEvidence(inspectItem.evidenceId);
                 setInspectItem(null);
               }}
             >
@@ -628,7 +808,7 @@ export function EvidenceListView({
               className="btn-tactile-primary"
               style={{ flex: 1.5, fontSize: "11.5px", padding: "8px" }}
               onClick={() => {
-                onSelectEvidence(inspectItem.evidenceId);
+                if (onSelectEvidence) onSelectEvidence(inspectItem.evidenceId);
                 setInspectItem(null);
               }}
             >

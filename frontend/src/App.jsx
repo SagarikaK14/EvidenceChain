@@ -26,6 +26,7 @@ import { Sidebar } from "./components/Sidebar";
 import { Header } from "./components/Header";
 import { LoginModal } from "./components/LoginModal";
 import { Toast } from "./components/Toast";
+import { ErrorBoundary } from "./components/ErrorBoundary";
 
 import { LoginView } from "./views/LoginView";
 import { LandingPageView } from "./views/LandingPageView";
@@ -383,10 +384,29 @@ export default function App() {
       setViewedFileUrl(objectUrl);
 
       const disposition = response.headers.get("Content-Disposition");
-      let filename = "evidence-file";
+      let filename = "";
       if (disposition) {
-        const match = disposition.match(/filename="?([^"]+)"?/i);
-        if (match?.[1]) filename = match[1];
+        const match = disposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)["']?/i);
+        if (match?.[1]) filename = decodeURIComponent(match[1]);
+      }
+      if (!filename || filename === "evidence-file") {
+        const matchedItem = evidenceList?.find((e) => (e.evidenceId || e.id) === targetId) || (evidenceDetails?.metadata?.evidenceId === targetId ? evidenceDetails.metadata : null);
+        if (matchedItem?.filePath) {
+          filename = matchedItem.filePath.split(/[/\\]/).pop();
+        } else if (matchedItem?.title && matchedItem.title.includes(".")) {
+          filename = matchedItem.title;
+        } else {
+          const typeToExt = {
+            "application/pdf": ".pdf",
+            "image/png": ".png",
+            "image/jpeg": ".jpg",
+            "text/plain": ".txt",
+            "text/csv": ".csv",
+            "application/json": ".json",
+          };
+          const ext = typeToExt[blob.type] || "";
+          filename = `${targetId}${ext || ".bin"}`;
+        }
       }
       setViewedFileName(filename);
 
@@ -421,10 +441,29 @@ export default function App() {
       const objectUrl = URL.createObjectURL(blob);
 
       const disposition = response.headers.get("Content-Disposition");
-      let filename = "evidence-file";
+      let filename = "";
       if (disposition) {
-        const match = disposition.match(/filename="?([^"]+)"?/i);
-        if (match?.[1]) filename = match[1];
+        const match = disposition.match(/filename\*?=(?:UTF-8'')?["']?([^"';]+)["']?/i);
+        if (match?.[1]) filename = decodeURIComponent(match[1]);
+      }
+      if (!filename || filename === "evidence-file") {
+        const matchedItem = evidenceList?.find((e) => (e.evidenceId || e.id) === targetId) || (evidenceDetails?.metadata?.evidenceId === targetId ? evidenceDetails.metadata : null);
+        if (matchedItem?.filePath) {
+          filename = matchedItem.filePath.split(/[/\\]/).pop();
+        } else if (matchedItem?.title && matchedItem.title.includes(".")) {
+          filename = matchedItem.title;
+        } else {
+          const typeToExt = {
+            "application/pdf": ".pdf",
+            "image/png": ".png",
+            "image/jpeg": ".jpg",
+            "text/plain": ".txt",
+            "text/csv": ".csv",
+            "application/json": ".json",
+          };
+          const ext = typeToExt[blob.type] || "";
+          filename = `${targetId}${ext || ".bin"}`;
+        }
       }
 
       const link = document.createElement("a");
@@ -436,7 +475,7 @@ export default function App() {
       URL.revokeObjectURL(objectUrl);
 
       // Refresh access history
-      const hRes = await getAccessHistoryAPI(evidenceId);
+      const hRes = await getAccessHistoryAPI(targetId);
       setDetailsAccessHistory(hRes.accessHistory || []);
     } catch (err) {
       showToast("Download Error: " + err.message, "error");
@@ -779,7 +818,8 @@ export default function App() {
         />
 
         <main className="app-content-area">
-          {activeView === "dashboard" && (
+          <ErrorBoundary onReset={() => setActiveView("dashboard")}>
+            {activeView === "dashboard" && (
             <DashboardView
               evidenceList={evidenceList}
               backendConnected={backendConnected}
@@ -968,6 +1008,7 @@ export default function App() {
               }}
             />
           )}
+          </ErrorBoundary>
         </main>
       </div>
 

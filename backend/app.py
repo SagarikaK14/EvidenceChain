@@ -9,6 +9,7 @@ from urllib.parse import urlparse
 from dotenv import load_dotenv
 from werkzeug.middleware.proxy_fix import ProxyFix
 import re
+import mimetypes
 
 # Load environment configuration: prioritize .env.demo in demo deployments, fallback to .env
 def _load_env():
@@ -59,6 +60,7 @@ from database.db import (
     get_db_admin_audit_log,
     init_db,
     seed_demo_users,
+    seed_demo_case_hierarchies,
     get_all_cases_with_stats,
     get_case_assignments_list,
     build_case_hierarchy_tree_structure,
@@ -312,6 +314,7 @@ def set_security_headers(response):
     response.headers["X-Frame-Options"] = "SAMEORIGIN"
     response.headers["X-XSS-Protection"] = "1; mode=block"
     response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    response.headers["Access-Control-Expose-Headers"] = "Content-Disposition, Content-Type, Content-Length"
     return response
 
 # Register institutional authentication blueprint
@@ -358,6 +361,7 @@ def handle_500(e):
 # Initialize database schema and seed demo accounts on startup
 try:
     init_db()
+    seed_demo_case_hierarchies()
     if os.getenv("DEMO_USER_PASSWORD"):
         seed_demo_users()
     else:
@@ -485,6 +489,10 @@ def list_evidence_route():
         connection = get_db()
         cursor = connection.cursor()
 
+        cursor.execute("SELECT id, name, email, wallet_address FROM users")
+        user_rows = cursor.fetchall()
+        user_map = {u["id"]: u for u in user_rows}
+
         cursor.execute(
             """
             SELECT
@@ -546,6 +554,14 @@ def list_evidence_route():
             else:
                 unavailable_count += 1
 
+            reg_raw = row[6]
+            if isinstance(reg_raw, int) and reg_raw in user_map:
+                registered_by_str = user_map[reg_raw]["wallet_address"] or user_map[reg_raw]["email"] or str(reg_raw)
+            elif reg_raw is not None and str(reg_raw).strip():
+                registered_by_str = str(reg_raw).strip()
+            else:
+                registered_by_str = "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266"
+
             evidence_list.append({
                 "evidenceId": ev_id,
                 "caseId": row[1],
@@ -553,7 +569,7 @@ def list_evidence_route():
                 "description": row[3] or "",
                 "filePath": row[4],
                 "sha256Hash": row[5],
-                "registeredBy": row[6] or "0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266",
+                "registeredBy": registered_by_str,
                 "blockchainEvidenceId": row[7] or row[0],
                 "registrationTxHash": row[8],
                 "createdAt": row[9],
@@ -597,6 +613,10 @@ def get_evidence_route(evidence_id):
     try:
         connection = get_db()
         cursor = connection.cursor()
+
+        cursor.execute("SELECT id, name, email, wallet_address FROM users")
+        user_rows = cursor.fetchall()
+        user_map = {u["id"]: u for u in user_rows}
 
         cursor.execute(
             """
@@ -1980,11 +2000,33 @@ def view_evidence_file_route(evidence_id):
             user_address
         )
 
-        return send_file(
+        filename = os.path.basename(file_path)
+        mime, _ = mimetypes.guess_type(file_path)
+        if not mime:
+            lower = filename.lower()
+            if lower.endswith(".pdf"):
+                mime = "application/pdf"
+            elif lower.endswith(".json"):
+                mime = "application/json"
+            elif lower.endswith(".csv"):
+                mime = "text/csv"
+            elif lower.endswith((".png", ".jpg", ".jpeg")):
+                ext = lower.split(".")[-1]
+                mime = f"image/{'jpeg' if ext in ('jpg', 'jpeg') else ext}"
+            elif lower.endswith((".txt", ".log", ".sql")):
+                mime = "text/plain; charset=utf-8"
+            else:
+                mime = "application/octet-stream"
+
+        resp = send_file(
             file_path,
             as_attachment=False,
-            download_name=os.path.basename(file_path)
+            mimetype=mime,
+            download_name=filename
         )
+        resp.headers["Content-Disposition"] = f'inline; filename="{filename}"'
+        resp.headers["Access-Control-Expose-Headers"] = "Content-Disposition, Content-Type, Content-Length"
+        return resp
 
     except Exception as error:
         return jsonify({
@@ -2063,11 +2105,33 @@ def download_evidence_file_route(evidence_id):
             user_address
         )
 
-        return send_file(
+        filename = os.path.basename(file_path)
+        mime, _ = mimetypes.guess_type(file_path)
+        if not mime:
+            lower = filename.lower()
+            if lower.endswith(".pdf"):
+                mime = "application/pdf"
+            elif lower.endswith(".json"):
+                mime = "application/json"
+            elif lower.endswith(".csv"):
+                mime = "text/csv"
+            elif lower.endswith((".png", ".jpg", ".jpeg")):
+                ext = lower.split(".")[-1]
+                mime = f"image/{'jpeg' if ext in ('jpg', 'jpeg') else ext}"
+            elif lower.endswith((".txt", ".log", ".sql")):
+                mime = "text/plain; charset=utf-8"
+            else:
+                mime = "application/octet-stream"
+
+        resp = send_file(
             file_path,
             as_attachment=True,
-            download_name=os.path.basename(file_path)
+            mimetype=mime,
+            download_name=filename
         )
+        resp.headers["Content-Disposition"] = f'attachment; filename="{filename}"'
+        resp.headers["Access-Control-Expose-Headers"] = "Content-Disposition, Content-Type, Content-Length"
+        return resp
 
     except Exception as error:
         return jsonify({

@@ -11,7 +11,7 @@
 // Fully responsive across 320px, 375px, 390px, 430px, 768px, and desktop
 // ============================================================
 
-import { useState } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { CryptographicFingerprint } from "../components/CryptographicFingerprint";
 import { getEvidenceStatus } from "../utils/statusLabels";
 import { formatISTDateTime } from "../utils/dateUtils";
@@ -37,11 +37,74 @@ export function EvidenceDetailsView({
   const [copiedVault, setCopiedVault] = useState(false);
   const [showFullHash, setShowFullHash] = useState(false);
 
+  // File Preview State
+  const [fileContentText, setFileContentText] = useState("");
+  const [contentLoading, setContentLoading] = useState(false);
+
   const blockchain = evidenceData?.blockchain || {};
   const metadata = evidenceData?.metadata || {};
 
   const hashVal = blockchain.evidenceHash || metadata.sha256Hash || "";
   const txHash = metadata.registrationTxHash || blockchain.registrationTxHash || "";
+
+  // Inspect file extension and format
+  const fileExt = useMemo(() => {
+    const raw = (viewedFileName || metadata?.filePath || "").split(/[/\\]/).pop() || "";
+    const parts = raw.split(".");
+    return parts.length > 1 ? parts.pop().toLowerCase() : "";
+  }, [viewedFileName, metadata]);
+
+  const isImage = ["png", "jpg", "jpeg", "webp", "gif", "svg"].includes(fileExt);
+  const isPdf = fileExt === "pdf";
+  const isCsv = fileExt === "csv";
+  const isJson = fileExt === "json";
+  const isTxt = ["txt", "log", "sql", "env", "md"].includes(fileExt);
+  const isBinary = ["bin", "pcap", "dd", "hex", "dat"].includes(fileExt) || (!isImage && !isPdf && !isCsv && !isJson && !isTxt);
+
+  // Fetch text for text/csv/json preview
+  useEffect(() => {
+    if (!viewedFileUrl) {
+      setFileContentText("");
+      return;
+    }
+    if (isCsv || isJson || isTxt) {
+      setContentLoading(true);
+      fetch(viewedFileUrl)
+        .then((res) => res.text())
+        .then((txt) => {
+          setFileContentText(txt);
+          setContentLoading(false);
+        })
+        .catch((err) => {
+          console.error("Preview fetch error:", err);
+          setContentLoading(false);
+        });
+    }
+  }, [viewedFileUrl, isCsv, isJson, isTxt]);
+
+  // CSV Parsing
+  const { csvHeaders, csvRows } = useMemo(() => {
+    if (!isCsv || !fileContentText) return { csvHeaders: [], csvRows: [] };
+    const lines = fileContentText.trim().split("\n").map((l) => l.trim()).filter(Boolean);
+    if (!lines.length) return { csvHeaders: [], csvRows: [] };
+    const headers = lines[0].split(",").map((h) => h.replace(/^["']|["']$/g, "").trim());
+    const rows = lines.slice(1).map((line) => {
+      // Basic CSV split
+      return line.split(",").map((c) => c.replace(/^["']|["']$/g, "").trim());
+    });
+    return { csvHeaders: headers, csvRows: rows };
+  }, [isCsv, fileContentText]);
+
+  // Formatted JSON
+  const formattedJson = useMemo(() => {
+    if (!isJson || !fileContentText) return "";
+    try {
+      const parsed = JSON.parse(fileContentText);
+      return JSON.stringify(parsed, null, 2);
+    } catch {
+      return fileContentText;
+    }
+  }, [isJson, fileContentText]);
 
   const copyHash = () => {
     if (!hashVal) return;
@@ -409,13 +472,15 @@ export function EvidenceDetailsView({
 
         {/* Inline File Viewer Container (Rendered when View File is triggered) */}
         {viewedFileUrl && (
-          <div className="doc-panel" style={{ border: "2px solid var(--green-institutional)", padding: "16px 18px", marginTop: "16px", minWidth: 0, maxWidth: "100%", boxSizing: "border-box" }}>
-            <div className="doc-panel-header" style={{ marginBottom: "12px" }}>
+          <div className="doc-panel" style={{ border: "2px solid var(--green-institutional, #287A58)", padding: "16px 18px", marginTop: "16px", minWidth: 0, maxWidth: "100%", boxSizing: "border-box" }}>
+            <div className="doc-panel-header" style={{ marginBottom: "12px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <div>
-                <span style={{ fontFamily: "var(--font-mono)", fontSize: "10.5px", color: "var(--green-deep)", fontWeight: 600 }}>
-                  SECURE INLINE INSPECTOR (VIEW PERMISSION ENFORCED)
+                <span style={{ fontFamily: "var(--font-mono)", fontSize: "10.5px", color: "var(--green-deep, #1E5C42)", fontWeight: 700, textTransform: "uppercase" }}>
+                  SECURE INLINE INSPECTOR • {fileExt ? fileExt.toUpperCase() : "PAYLOAD"}
                 </span>
-                <h3 className="doc-panel-title" style={{ fontSize: "14px", margin: "2px 0 0 0" }}>{viewedFileName || "Evidence Payload"}</h3>
+                <h3 className="doc-panel-title" style={{ fontSize: "14px", margin: "2px 0 0 0", color: "var(--text-primary)" }}>
+                  {viewedFileName || "Evidence Payload"}
+                </h3>
               </div>
               <button
                 type="button"
@@ -427,19 +492,163 @@ export function EvidenceDetailsView({
               </button>
             </div>
 
-            <div style={{ padding: "16px", backgroundColor: "var(--surface-primary)", border: "1px solid var(--border-color)", overflow: "auto", maxHeight: "400px", maxWidth: "100%", boxSizing: "border-box" }}>
-              {viewedFileName.match(/\.(png|jpg|jpeg|gif|webp)$/i) ? (
-                <img
-                  src={viewedFileUrl}
-                  alt="Evidence preview"
-                  style={{ maxWidth: "100%", height: "auto", display: "block", margin: "0 auto" }}
-                />
-              ) : (
-                <iframe
-                  src={viewedFileUrl}
-                  title="Evidence File Content"
-                  style={{ width: "100%", height: "320px", border: "none", backgroundColor: "var(--surface-raised)" }}
-                />
+            <div style={{ padding: "16px", backgroundColor: "var(--surface-primary)", border: "1px solid var(--border-color)", borderRadius: "4px", overflow: "auto", maxHeight: "480px", maxWidth: "100%", boxSizing: "border-box" }}>
+              {/* 1. Image View */}
+              {isImage && (
+                <div style={{ textAlign: "center", padding: "8px" }}>
+                  <img
+                    src={viewedFileUrl}
+                    alt={viewedFileName || "Evidence visual artifact"}
+                    style={{ maxWidth: "100%", maxHeight: "380px", objectFit: "contain", borderRadius: "4px", border: "1px solid var(--border-color)", margin: "0 auto", display: "block" }}
+                  />
+                  <div style={{ marginTop: "10px", fontSize: "11px", color: "var(--text-secondary)", fontFamily: "var(--font-mono)" }}>
+                    Authenticated visual diagram • Bitwise matching SHA-256
+                  </div>
+                </div>
+              )}
+
+              {/* 2. PDF View */}
+              {isPdf && (
+                <div>
+                  <iframe
+                    src={viewedFileUrl}
+                    title="PDF Document Preview"
+                    style={{ width: "100%", height: "420px", border: "1px solid var(--border-color)", borderRadius: "4px", backgroundColor: "#FFFFFF" }}
+                  />
+                  <div style={{ marginTop: "8px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: "11px", color: "var(--text-secondary)" }}>Certified PDF Forensic Exhibit Document</span>
+                    <a href={viewedFileUrl} target="_blank" rel="noopener noreferrer" style={{ fontSize: "11px", color: "var(--green-deep, #1E5C42)", fontWeight: 600 }}>
+                      Open PDF in Full Tab ↗
+                    </a>
+                  </div>
+                </div>
+              )}
+
+              {/* 3. CSV View */}
+              {isCsv && (
+                <div>
+                  {contentLoading ? (
+                    <div style={{ padding: "24px", textAlign: "center", color: "var(--text-secondary)" }}>Loading tabular data stream...</div>
+                  ) : (
+                    <div style={{ overflowX: "auto" }}>
+                      <table className="archival-table" style={{ width: "100%", fontSize: "11px", borderCollapse: "collapse" }}>
+                        <thead>
+                          <tr style={{ backgroundColor: "var(--surface-raised, #F3F4F6)" }}>
+                            {csvHeaders.map((h, i) => (
+                              <th key={i} style={{ padding: "6px 10px", textAlign: "left", borderBottom: "1px solid var(--border-color)", fontWeight: 600 }}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {csvRows.map((row, rIdx) => (
+                            <tr key={rIdx} style={{ backgroundColor: rIdx % 2 === 0 ? "transparent" : "var(--surface-raised, #FAFAFA)" }}>
+                              {row.map((cell, cIdx) => (
+                                <td key={cIdx} style={{ padding: "6px 10px", borderBottom: "1px solid var(--border-color)", fontFamily: "var(--font-mono)" }}>{cell}</td>
+                              ))}
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {/* 4. JSON View */}
+              {isJson && (
+                <div>
+                  {contentLoading ? (
+                    <div style={{ padding: "24px", textAlign: "center", color: "var(--text-secondary)" }}>Loading structured manifest...</div>
+                  ) : (
+                    <pre style={{
+                      backgroundColor: "#0B132B",
+                      color: "#E2E8F0",
+                      padding: "16px",
+                      borderRadius: "4px",
+                      fontFamily: "var(--font-mono)",
+                      fontSize: "11.5px",
+                      overflow: "auto",
+                      maxHeight: "360px",
+                      lineHeight: 1.5,
+                      margin: 0
+                    }}>
+                      {formattedJson}
+                    </pre>
+                  )}
+                </div>
+              )}
+
+              {/* 5. Plain Text / Log View */}
+              {isTxt && (
+                <div>
+                  {contentLoading ? (
+                    <div style={{ padding: "24px", textAlign: "center", color: "var(--text-secondary)" }}>Loading text chronology...</div>
+                  ) : (
+                    <pre style={{
+                      backgroundColor: "var(--surface-raised, #F8F9FA)",
+                      border: "1px solid var(--border-color)",
+                      padding: "14px",
+                      borderRadius: "4px",
+                      fontFamily: "var(--font-mono)",
+                      fontSize: "11.5px",
+                      overflow: "auto",
+                      maxHeight: "360px",
+                      lineHeight: 1.6,
+                      color: "var(--text-primary)",
+                      margin: 0,
+                      whiteSpace: "pre-wrap"
+                    }}>
+                      {fileContentText}
+                    </pre>
+                  )}
+                </div>
+              )}
+
+              {/* 6. Raw Binary Payload Inspection Banner */}
+              {isBinary && (
+                <div style={{
+                  backgroundColor: "var(--surface-raised, #F9FAFB)",
+                  border: "1px solid var(--border-color, #E5E7EB)",
+                  borderRadius: "6px",
+                  padding: "24px 16px",
+                  textAlign: "center"
+                }}>
+                  <div style={{
+                    display: "inline-flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    width: "48px",
+                    height: "48px",
+                    borderRadius: "50%",
+                    backgroundColor: "rgba(40, 122, 88, 0.12)",
+                    color: "var(--green-deep, #1E5C42)",
+                    marginBottom: "12px"
+                  }}>
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="2" y="2" width="20" height="8" rx="2" ry="2" />
+                      <rect x="2" y="14" width="20" height="8" rx="2" ry="2" />
+                      <line x1="6" y1="6" x2="6.01" y2="6" />
+                      <line x1="6" y1="18" x2="6.01" y2="18" />
+                    </svg>
+                  </div>
+                  <h4 style={{ margin: "0 0 6px 0", fontSize: "14px", fontWeight: 700, color: "var(--text-primary)" }}>
+                    FORENSIC BITSTREAM ARCHIVE (RAW BINARY)
+                  </h4>
+                  <p style={{ margin: "0 auto 16px auto", maxWidth: "500px", fontSize: "12px", color: "var(--text-secondary)", lineHeight: 1.5 }}>
+                    This exhibit ({viewedFileName}) is a low-level binary bitstream artifact (such as a memory dump, packet capture, or raw disk slice). In-browser rendering is intentionally bypassed to protect evidentiary purity. Please use the download action below to export the certified bitstream for laboratory ingestion.
+                  </p>
+                  <div>
+                    <button
+                      type="button"
+                      className="btn-tactile-primary"
+                      onClick={() => onDownloadFile(evidenceId)}
+                      disabled={downloadAccessAllowed === false}
+                      style={{ fontSize: "12px", padding: "8px 18px" }}
+                    >
+                      Download Certified Payload ({viewedFileName})
+                    </button>
+                  </div>
+                </div>
               )}
             </div>
           </div>

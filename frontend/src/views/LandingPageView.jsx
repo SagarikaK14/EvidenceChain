@@ -18,10 +18,71 @@ export function LandingPageView({ onNavigateToLogin }) {
 
   // Interactive Evidence Lifecycle State: Register → Hash → Anchor → Verify → Audit
   const [activeLifecycleIndex, setActiveLifecycleIndex] = useState(0);
-  const [isLifecyclePlaying, setIsLifecyclePlaying] = useState(true);
+  const [isLifecyclePlaying, setIsLifecyclePlaying] = useState(false);
   const lifecycleAutoTimerRef = useRef(null);
 
-  // Scroll reveal IntersectionObserver
+  // Scroll Position & Motion Tracking
+  const [scrollY, setScrollY] = useState(0);
+  const [prefersReducedMotion, setPrefersReducedMotion] = useState(false);
+  const [lifecycleScrollProgress, setLifecycleScrollProgress] = useState(0);
+  const [isManualLifecycleOverride, setIsManualLifecycleOverride] = useState(false);
+  const manualOverrideTimerRef = useRef(null);
+
+  // DOM References for scroll tracking
+  const heroRef = useRef(null);
+  const blockchainVizRef = useRef(null);
+  const lifecycleRef = useRef(null);
+
+  // Detect prefers-reduced-motion
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setPrefersReducedMotion(mq.matches);
+    const handler = (e) => setPrefersReducedMotion(e.matches);
+    mq.addEventListener("change", handler);
+    return () => mq.removeEventListener("change", handler);
+  }, []);
+
+  // High-performance passive scroll handler via requestAnimationFrame
+  useEffect(() => {
+    let ticking = false;
+
+    const onScroll = () => {
+      if (!ticking) {
+        window.requestAnimationFrame(() => {
+          const currentScrollY = window.pageYOffset || document.documentElement.scrollTop;
+          setScrollY(currentScrollY);
+
+          // Track Lifecycle Section Scroll Progress
+          if (lifecycleRef.current) {
+            const rect = lifecycleRef.current.getBoundingClientRect();
+            const windowHeight = window.innerHeight;
+            const startY = windowHeight * 0.75;
+            const endY = -rect.height * 0.25;
+            const totalDistance = startY - endY;
+            const currentDistance = startY - rect.top;
+            const progress = Math.max(0, Math.min(1, currentDistance / totalDistance));
+            setLifecycleScrollProgress(progress);
+
+            // If user has not manually pinned a step, drive lifecycle stage from scroll progress
+            if (!isManualLifecycleOverride) {
+              const stepIndex = Math.min(4, Math.floor(progress * 5));
+              setActiveLifecycleIndex(stepIndex);
+            }
+          }
+
+          ticking = false;
+        });
+        ticking = true;
+      }
+    };
+
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [isManualLifecycleOverride]);
+
+  // Scroll reveal IntersectionObserver for section entry
   useEffect(() => {
     const observer = new IntersectionObserver(
       (entries) => {
@@ -32,7 +93,7 @@ export function LandingPageView({ onNavigateToLogin }) {
           }
         });
       },
-      { threshold: 0.1, rootMargin: "0px 0px -30px 0px" }
+      { threshold: 0.08, rootMargin: "0px 0px -40px 0px" }
     );
 
     const elements = document.querySelectorAll(".ec-reveal");
@@ -77,24 +138,15 @@ export function LandingPageView({ onNavigateToLogin }) {
     };
   }, []);
 
-  // Interactive Lifecycle Auto-Play
-  useEffect(() => {
-    if (!isLifecyclePlaying) return;
-
-    lifecycleAutoTimerRef.current = setInterval(() => {
-      setActiveLifecycleIndex((prev) => (prev + 1) % 5);
-    }, 4500);
-
-    return () => {
-      if (lifecycleAutoTimerRef.current) {
-        clearInterval(lifecycleAutoTimerRef.current);
-      }
-    };
-  }, [isLifecyclePlaying]);
-
+  // Handle manual tab selection on Lifecycle
   const handleSelectLifecycleStep = (index) => {
     setActiveLifecycleIndex(index);
-    setIsLifecyclePlaying(false);
+    setIsManualLifecycleOverride(true);
+    if (manualOverrideTimerRef.current) clearTimeout(manualOverrideTimerRef.current);
+    // Return to scroll-driven control after 6 seconds of inactivity
+    manualOverrideTimerRef.current = setTimeout(() => {
+      setIsManualLifecycleOverride(false);
+    }, 6000);
   };
 
   const scrollToSection = (id) => {
@@ -104,6 +156,14 @@ export function LandingPageView({ onNavigateToLogin }) {
       element.scrollIntoView({ behavior: "smooth" });
     }
   };
+
+  // Compute scroll-driven visual transformations
+  const heroScale = prefersReducedMotion ? 1 : Math.max(0.92, 1 - (scrollY / 600) * 0.08);
+  const heroOpacity = prefersReducedMotion ? 1 : Math.max(0.4, 1 - (scrollY / 550) * 0.6);
+  const heroTranslateY = prefersReducedMotion ? 0 : Math.min(50, scrollY * 0.12);
+  const bgParallaxOrb1 = prefersReducedMotion ? 0 : scrollY * -0.15;
+  const bgParallaxOrb2 = prefersReducedMotion ? 0 : scrollY * 0.1;
+  const conduitOffset = prefersReducedMotion ? 0 : -(scrollY * 0.35);
 
   // 5 Stages of Digital Custody: Register → Hash → Anchor → Verify → Audit
   const LIFECYCLE_STAGES = [
@@ -329,10 +389,18 @@ DISCOVERY_EXPORT:   Courtroom Certificate Generated`,
       {/* ============================================================
           HERO SECTION: Every Piece of Evidence. Accounted For.
           ============================================================ */}
-      <section className="landing-hero" aria-label="Hero Introduction">
-        <div className="hero-ambient-glow" aria-hidden="true" />
+      <section className="landing-hero" aria-label="Hero Introduction" ref={heroRef}>
+        <div className="hero-ambient-glow" style={{ transform: `translateY(${bgParallaxOrb1}px)` }} aria-hidden="true" />
 
-        <div className="landing-hero-content">
+        <div
+          className="landing-hero-content"
+          style={{
+            transform: `scale(${heroScale}) translateY(${heroTranslateY}px)`,
+            opacity: heroOpacity,
+            transformOrigin: "top center",
+            willChange: "transform, opacity",
+          }}
+        >
           {/* Left Column: Product Positioning & Value */}
           <div className="hero-text-column ec-reveal is-revealed">
             <div className="hero-tag-badge">
@@ -543,16 +611,16 @@ DISCOVERY_EXPORT:   Courtroom Certificate Generated`,
 
             {/* Connecting Conduits with animated dash flows */}
             <path d="M 110 80 Q 185 30, 260 80" stroke="rgba(255, 255, 255, 0.15)" strokeWidth="2" fill="none" />
-            <path d="M 110 80 Q 185 30, 260 80" stroke="url(#conduitGrad1)" strokeWidth="2" strokeDasharray="6 6" fill="none" className="network-data-flow" />
+            <path d="M 110 80 Q 185 30, 260 80" stroke="url(#conduitGrad1)" strokeWidth="2" strokeDasharray="6 6" strokeDashoffset={conduitOffset} fill="none" className="network-data-flow" />
 
             <path d="M 260 80 Q 355 130, 450 80" stroke="rgba(255, 255, 255, 0.15)" strokeWidth="2" fill="none" />
-            <path d="M 260 80 Q 355 130, 450 80" stroke="url(#conduitGrad2)" strokeWidth="2" strokeDasharray="6 6" fill="none" className="network-data-flow" />
+            <path d="M 260 80 Q 355 130, 450 80" stroke="url(#conduitGrad2)" strokeWidth="2" strokeDasharray="6 6" strokeDashoffset={conduitOffset * 1.1} fill="none" className="network-data-flow" />
 
             <path d="M 450 80 Q 545 30, 640 80" stroke="rgba(255, 255, 255, 0.15)" strokeWidth="2" fill="none" />
-            <path d="M 450 80 Q 545 30, 640 80" stroke="url(#conduitGrad2)" strokeWidth="2" strokeDasharray="6 6" fill="none" className="network-data-flow" />
+            <path d="M 450 80 Q 545 30, 640 80" stroke="url(#conduitGrad2)" strokeWidth="2" strokeDasharray="6 6" strokeDashoffset={conduitOffset * 0.9} fill="none" className="network-data-flow" />
 
             <path d="M 640 80 Q 725 130, 810 80" stroke="rgba(255, 255, 255, 0.15)" strokeWidth="2" fill="none" />
-            <path d="M 640 80 Q 725 130, 810 80" stroke="url(#conduitGrad3)" strokeWidth="2" strokeDasharray="6 6" fill="none" className="network-data-flow" />
+            <path d="M 640 80 Q 725 130, 810 80" stroke="url(#conduitGrad3)" strokeWidth="2" strokeDasharray="6 6" strokeDashoffset={conduitOffset * 1.2} fill="none" className="network-data-flow" />
 
             {/* Node 1: Evidence Intake */}
             <g transform="translate(110, 80)">
@@ -606,7 +674,7 @@ DISCOVERY_EXPORT:   Courtroom Certificate Generated`,
           INTERACTIVE EVIDENCE LIFECYCLE SECTION
           Register → Hash → Anchor → Verify → Audit
           ============================================================ */}
-      <section id="lifecycle" className="landing-section lifecycle-section" aria-label="Evidence Lifecycle Stages">
+      <section id="lifecycle" className="landing-section lifecycle-section" aria-label="Evidence Lifecycle Stages" ref={lifecycleRef}>
         <div className="section-container">
           <div className="section-header-centered ec-reveal">
             <span className="section-badge">INTERACTIVE EVIDENCE LIFECYCLE</span>
@@ -614,6 +682,17 @@ DISCOVERY_EXPORT:   Courtroom Certificate Generated`,
             <p className="section-subtitle">
               Follow how a piece of digital evidence progresses from incident-response intake through judicial presentation with mathematical integrity and dual-tier access controls.
             </p>
+          </div>
+
+          {/* Scroll-Driven Dynamic Progress Track Indicator */}
+          <div className="lifecycle-scroll-progress-container" title={`Scroll-driven Custody Stage Progress: ${Math.round(lifecycleScrollProgress * 100)}%`}>
+            <div
+              className="lifecycle-scroll-progress-fill"
+              style={{
+                width: `${Math.round(lifecycleScrollProgress * 100)}%`,
+                backgroundColor: currentStage.statusColor || "#287A58",
+              }}
+            />
           </div>
 
           {/* Interactive Navigation Track */}

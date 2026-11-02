@@ -544,31 +544,16 @@ def login():
         except Exception:
             pwd_matches_hash = False
 
-        # In public demonstration mode, allow standard evaluation passwords for synthetic personas
-        is_demo_mode = is_public_demo_mode()
-        is_synthetic_persona = resolved_email in SYNTHETIC_DEMO_PERSONAS
-        pwd_matches_demo_suite = bool(
-            is_demo_mode and is_synthetic_persona and (
-                password in (
-                    "EvidenceChain@Demo2026!",
-                    "EvidenceChain@2026",
-                    "EvidenceChain2026!",
-                    "Demo@2026!",
-                    "Demo2026!",
-                    "demo123",
-                    "password"
-                )
-            )
-        )
-
-        if not pwd_matches_hash and not pwd_matches_env and not pwd_matches_demo_suite:
+        # Strictly require valid password hash OR configured environment variable DEMO_USER_PASSWORD
+        # Universal fallback passwords have been completely removed.
+        if not pwd_matches_hash and not pwd_matches_env:
             return jsonify({
                 "status": "error",
                 "message": "Invalid email or password."
             }), 401
 
-        # If authenticated via DEMO_USER_PASSWORD or demo suite, synchronize stored hash
-        if (pwd_matches_env or pwd_matches_demo_suite) and not pwd_matches_hash:
+        # If authenticated via DEMO_USER_PASSWORD, synchronize stored hash
+        if pwd_matches_env and not pwd_matches_hash:
             try:
                 new_hash = generate_password_hash(password)
                 cursor.execute("UPDATE users SET password_hash = ? WHERE id = ?", (new_hash, user["id"]))
@@ -576,6 +561,30 @@ def login():
             except Exception:
                 pass
 
+        # In public demonstration mode, manual MFA flow is disabled rather than presenting fake MFA security
+        # (cloud container runtimes lack outbound SMS/email gateways and server terminal logs are inaccessible to evaluators).
+        # When valid credentials match, establish the authenticated session directly.
+        if is_public_demo_mode():
+            session.clear()
+            session["user_id"] = user["id"]
+            session["email"] = user["email"]
+            session["role"] = user["role"]
+            session["authenticated"] = True
+            session["is_demo"] = bool(resolved_email in SYNTHETIC_DEMO_PERSONAS)
+            session["auth_method"] = "MANUAL_PASSWORD_DEMO"
+            session["auth_time"] = datetime.now(timezone.utc).isoformat()
+            session["expires_at"] = (datetime.now(timezone.utc) + timedelta(hours=8)).isoformat()
+            session["demo_registrations_count"] = 0
+            session.permanent = True
+
+            user_payload = format_user_payload(user)
+            return jsonify({
+                "status": "success",
+                "message": f"Authentication confirmed for {user['name']}.",
+                "user": user_payload
+            }), 200
+
+        # In non-demo mode (e.g. local development or institutional production), issue genuine dynamic OTP challenge
         # Invalidate any existing unused challenges for this user
         cursor.execute("""
             UPDATE mfa_challenges
@@ -705,13 +714,9 @@ def verify_mfa():
                 "message": "Verification code has expired. Please request a new code or sign in again."
             }), 400
 
-        # In public demonstration mode, accept standard evaluation OTP '123456' or '000000' for synthetic demo personas
-        is_demo_mode = is_public_demo_mode()
-        is_demo_account = challenge["email"] in SYNTHETIC_DEMO_PERSONAS
-        is_demo_otp = bool(is_demo_mode and is_demo_account and otp in ("123456", "000000"))
-
-        # Verify OTP hash
-        is_correct = is_demo_otp or check_password_hash(challenge["otp_hash"], otp)
+        # Strictly verify dynamic OTP against stored cryptographic hash.
+        # Fixed bypass codes (e.g. 123456, 000000) have been completely eliminated.
+        is_correct = check_password_hash(challenge["otp_hash"], otp)
 
         if not is_correct:
             new_attempts = current_attempts + 1
@@ -753,7 +758,7 @@ def verify_mfa():
         session["email"] = challenge["email"]
         session["role"] = challenge["role"]
         session["authenticated"] = True
-        session["is_demo"] = bool(is_demo_mode or is_demo_account)
+        session["is_demo"] = bool(is_public_demo_mode() or challenge["email"] in SYNTHETIC_DEMO_PERSONAS)
         session["demo_registrations_count"] = 0
         session["auth_time"] = datetime.now(timezone.utc).isoformat()
         session["expires_at"] = (datetime.now(timezone.utc) + timedelta(hours=8)).isoformat()

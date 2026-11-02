@@ -139,20 +139,57 @@ class TestDemoAuthSecurity(unittest.TestCase):
         self.assertEqual(res11.status_code, 429)
         self.assertIn("rate limit exceeded", res11.get_json().get("message", "").lower())
 
-    def test_06_genuine_mfa_flow_does_not_leak_otp(self):
-        """Standard login endpoint must never return OTP challenges in response payload."""
+    def test_06_public_demo_login_direct_auth_and_rejection_of_fallbacks(self):
+        """In public demo mode, manual login directly authenticates valid DEMO_USER_PASSWORD,
+        disables fake MFA challenges, and strictly rejects previously hardcoded fallback passwords."""
+        # Valid password in demo mode succeeds directly without fake MFA
         res = self.client.post("/api/auth/login", json={
             "email": "r.sen@forensics.example.com",
             "password": self.test_demo_password
         })
         self.assertEqual(res.status_code, 200)
         data = res.get_json()
-        self.assertEqual(data.get("status"), "mfa_required")
-        self.assertTrue(data.get("challengeId"))
-        self.assertTrue(data.get("maskedEmail"))
-        # Security Assertion: Zero exposure of demoOtp or raw OTP in response body
-        self.assertNotIn("demoOtp", data, "CRITICAL VULNERABILITY: demoOtp must not be leaked in API response!")
+        self.assertEqual(data.get("status"), "success")
+        self.assertEqual(data.get("user", {}).get("email"), "r.sen@forensics.example.com")
+        self.assertNotIn("challengeId", data)
         self.assertNotIn("otp", data)
+
+        # Previously hardcoded fallback passwords must now be strictly rejected
+        for bad_pwd in ("EvidenceChain@Demo2026!", "EvidenceChain@2026", "password", "demo123"):
+            bad_res = self.client.post("/api/auth/login", json={
+                "email": "r.sen@forensics.example.com",
+                "password": bad_pwd
+            })
+            self.assertEqual(bad_res.status_code, 401)
+            self.assertEqual(bad_res.get_json().get("status"), "error")
+
+    def test_09_mfa_endpoint_strictly_rejects_fixed_bypass_codes(self):
+        """Dynamic MFA endpoint must strictly reject fixed bypass codes like 123456 and 000000."""
+        # Unset PUBLIC_DEMO_MODE to generate a real MFA challenge
+        os.environ.pop("PUBLIC_DEMO_MODE", None)
+        try:
+            res = self.client.post("/api/auth/login", json={
+                "email": "r.sharma@forensics.example.com",
+                "password": self.test_demo_password
+            })
+            self.assertEqual(res.status_code, 200)
+            challenge_id = res.get_json()["challengeId"]
+
+            # Submitting fixed code 123456 must be rejected
+            mfa_res = self.client.post("/api/auth/mfa/verify", json={
+                "challengeId": challenge_id,
+                "otp": "123456"
+            })
+            self.assertIn(mfa_res.status_code, (401, 403))
+
+            # Submitting fixed code 000000 must be rejected
+            mfa_res2 = self.client.post("/api/auth/mfa/verify", json={
+                "challengeId": challenge_id,
+                "otp": "000000"
+            })
+            self.assertIn(mfa_res2.status_code, (401, 403))
+        finally:
+            os.environ["PUBLIC_DEMO_MODE"] = "true"
 
     def test_07_demo_profiles_includes_synthetic_roles_and_excludes_dev_accounts(self):
         """Public demo profile directory lists exactly the 5 original employee personas."""

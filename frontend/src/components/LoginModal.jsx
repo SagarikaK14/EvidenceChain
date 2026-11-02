@@ -186,7 +186,7 @@ export function LoginModal({ isOpen, onClose, onLoginSuccess }) {
           {step === "mfa" && (
             <form onSubmit={handleVerifyOtp}>
               <p style={{ marginBottom: "14px", fontSize: "12.5px", color: "var(--text-secondary)" }}>
-                Enter the dynamic 6-digit verification code dispatched for {maskedEmail}. (For public demo evaluation, enter code <code>123456</code> or check terminal).
+                Enter the dynamic 6-digit verification code dispatched for {maskedEmail}.
               </p>
 
               <div style={{ display: "flex", gap: "8px", justifyContent: "center", margin: "16px 0" }}>

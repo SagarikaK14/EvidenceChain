@@ -124,7 +124,7 @@ export function LoginView({
         setResendCooldown(30);
         setStep("mfa");
         setInfoMessage(
-          "Dynamic authentication challenge initiated. For public demonstration evaluation, enter verification code: 123456 (or check server terminal logs)."
+          "Dynamic authentication challenge initiated. Please enter the 6-digit verification code dispatched to your registered security token or server console."
         );
       } else if (response.status === "success" && response.user) {
         onLoginSuccess(response.user);
@@ -449,9 +449,8 @@ export function LoginView({
                   Public Demonstration & Evaluation Mode
                 </p>
                 <div style={{ fontSize: "11px", color: "#475569", marginBottom: "12px", background: "#F8FAFC", padding: "10px 12px", borderRadius: "6px", border: "1px solid #E2E8F0", textAlign: "left", lineHeight: "1.5" }}>
-                  <div><strong>Demo Personas:</strong> <code>r.sen@forensics.example.com</code> (HOD), <code>r.sharma@forensics.example.com</code> (Officer), or shortcuts (<code>hod</code>, <code>officer</code>, <code>analyst</code>, <code>custodian</code>, <code>investigator</code>).</div>
-                  <div style={{ marginTop: "4px" }}><strong>Password:</strong> Enter <code>EvidenceChain@Demo2026!</code> (or configured <code>DEMO_USER_PASSWORD</code>).</div>
-                  <div style={{ marginTop: "4px" }}><strong>Dynamic MFA Code:</strong> Enter <code>123456</code> (or check terminal).</div>
+                  <div><strong>Synthetic Personas:</strong> <code>r.sen@forensics.example.com</code> (HOD), <code>r.sharma@forensics.example.com</code> (Officer), <code>a.patel@forensics.example.com</code> (Analyst), <code>s.rao@forensics.example.com</code> (Custodian), <code>v.mehta@forensics.example.com</code> (Investigator).</div>
+                  <div style={{ marginTop: "4px" }}><strong>Evaluation Sign-In:</strong> Use the clearly labeled <strong>One-Click Demo Personas</strong> below for instant sandbox access, or enter your privately configured <code>DEMO_USER_PASSWORD</code> for manual institutional sign-in.</div>
                 </div>
                 <button
                   type="button"
@@ -617,7 +616,7 @@ export function LoginView({
                   }}
                 >
                   <div>
-                    <strong>Verification Challenge:</strong> Dynamic 6-digit OTP code dispatched for <code>{maskedEmail || email}</code>. For public demonstration evaluation, enter code <code>123456</code> (or check server terminal logs).
+                    <strong>Verification Challenge:</strong> Dynamic 6-digit OTP code dispatched for <code>{maskedEmail || email}</code>. Enter the security code received on your registered token or terminal.
                   </div>
                 </div>
 

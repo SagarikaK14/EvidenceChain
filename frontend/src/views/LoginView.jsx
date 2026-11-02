@@ -450,7 +450,7 @@ export function LoginView({
                 </p>
                 <div style={{ fontSize: "11px", color: "#475569", marginBottom: "12px", background: "#F8FAFC", padding: "10px 12px", borderRadius: "6px", border: "1px solid #E2E8F0", textAlign: "left", lineHeight: "1.5" }}>
                   <div><strong>Demo Personas:</strong> <code>r.sen@forensics.example.com</code> (HOD), <code>r.sharma@forensics.example.com</code> (Officer), or shortcuts (<code>hod</code>, <code>officer</code>, <code>analyst</code>, <code>custodian</code>, <code>investigator</code>).</div>
-                  <div style={{ marginTop: "4px" }}><strong>Password:</strong> Configured via environment <code>DEMO_USER_PASSWORD</code>.</div>
+                  <div style={{ marginTop: "4px" }}><strong>Password:</strong> Enter <code>EvidenceChain@Demo2026!</code> (or configured <code>DEMO_USER_PASSWORD</code>).</div>
                   <div style={{ marginTop: "4px" }}><strong>Dynamic MFA Code:</strong> Enter <code>123456</code> (or check terminal).</div>
                 </div>
                 <button

@@ -124,8 +124,10 @@ export function LoginView({
         setResendCooldown(30);
         setStep("mfa");
         setInfoMessage(
-          "Dynamic authentication challenge initiated. Check the Flask backend terminal to view your 6-digit one-time code."
+          "Dynamic authentication challenge initiated. For public demonstration evaluation, enter verification code: 123456 (or check server terminal logs)."
         );
+      } else if (response.status === "success" && response.user) {
+        onLoginSuccess(response.user);
       } else {
         setError(response.message || "Invalid credentials. Please verify your email and password.");
       }
@@ -443,9 +445,14 @@ export function LoginView({
               </button>
 
               <div style={{ marginTop: "24px", paddingTop: "16px", borderTop: "1px solid #E2E8F0", textAlign: "center" }}>
-                <p style={{ fontSize: "12px", color: "#64748B", marginBottom: "10px" }}>
+                <p style={{ fontSize: "12px", color: "#64748B", marginBottom: "8px" }}>
                   Public Demonstration & Evaluation Mode
                 </p>
+                <div style={{ fontSize: "11px", color: "#475569", marginBottom: "12px", background: "#F8FAFC", padding: "10px 12px", borderRadius: "6px", border: "1px solid #E2E8F0", textAlign: "left", lineHeight: "1.5" }}>
+                  <div><strong>Demo Personas:</strong> <code>r.sen@forensics.example.com</code> (HOD), <code>r.sharma@forensics.example.com</code> (Officer), or shortcuts (<code>hod</code>, <code>officer</code>, <code>analyst</code>, <code>custodian</code>, <code>investigator</code>).</div>
+                  <div style={{ marginTop: "4px" }}><strong>Password:</strong> Configured via environment <code>DEMO_USER_PASSWORD</code>.</div>
+                  <div style={{ marginTop: "4px" }}><strong>Dynamic MFA Code:</strong> Enter <code>123456</code> (or check terminal).</div>
+                </div>
                 <button
                   type="button"
                   className="btn-portal-secondary"
@@ -457,7 +464,7 @@ export function LoginView({
                   }}
                   id="portal-demo-mode-btn"
                 >
-                  <span>Explore with Synthetic Demo Personas →</span>
+                  <span>Or Sign In with One-Click Demo Personas →</span>
                 </button>
               </div>
             </form>
@@ -610,7 +617,7 @@ export function LoginView({
                   }}
                 >
                   <div>
-                    <strong>Development Mode:</strong> The dynamic 6-digit OTP code has been generated server-side and printed to the active <strong>Flask terminal / log</strong> for user <code>{maskedEmail || email}</code>.
+                    <strong>Verification Challenge:</strong> Dynamic 6-digit OTP code dispatched for <code>{maskedEmail || email}</code>. For public demonstration evaluation, enter code <code>123456</code> (or check server terminal logs).
                   </div>
                 </div>
 

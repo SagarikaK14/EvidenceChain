@@ -18,7 +18,7 @@ sys.path.insert(0, ROOT_DIR)
 from app import _load_env
 _load_env()
 
-from database.db import init_db, seed_demo_case_hierarchies, get_database_path
+from database.db import init_db, seed_demo_users, seed_demo_case_hierarchies, get_database_path
 from blockchain import (
     get_rpc_url,
     get_contract_address,
@@ -89,7 +89,14 @@ def bootstrap():
     # 3. Initialize SQLite database & seed users
     print(f"[*] Initializing database at {get_database_path()}...")
     init_db()
-    print("[✓] Database initialized and synthetic demo personas provisioned.")
+    if os.getenv("DEMO_USER_PASSWORD"):
+        try:
+            seed_demo_users()
+            print("[✓] Synthetic demonstration personas provisioned.")
+        except Exception as e:
+            print(f"[!] Notice during user seeding: {e}")
+    else:
+        print("[!] Notice: DEMO_USER_PASSWORD not configured. Demo personas will be auto-provisioned on demand.")
 
     # 4. Seed case reporting hierarchies
     print("[*] Establishing Department Authority case hierarchies...")

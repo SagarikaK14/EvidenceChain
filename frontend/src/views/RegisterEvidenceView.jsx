@@ -95,6 +95,13 @@ export function RegisterEvidenceView({
     };
   }, [evidenceList]);
 
+  // Reset errors and result on view unmount
+  useEffect(() => {
+    return () => {
+      if (onReset) onReset();
+    };
+  }, [onReset]);
+
   // File Preview State
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewUrl, setPreviewUrl] = useState("");

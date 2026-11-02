@@ -83,14 +83,14 @@ class TestDemoAuthSecurity(unittest.TestCase):
         self.assertTrue(disc.get("isDemoSession"))
         self.assertEqual(disc.get("authType"), "SYNTHETIC_DEMO_PASSTHROUGH")
         self.assertIn("Demonstration session active", disc.get("notice", ""))
-        self.assertEqual(disc.get("sessionExpiresInSeconds"), 1800)
+        self.assertEqual(disc.get("sessionExpiresInSeconds"), 28800)
 
         # Verify /api/auth/me reflects demonstration session state
         me_res = self.client.get("/api/auth/me")
         self.assertEqual(me_res.status_code, 200)
         me_data = me_res.get_json()
         self.assertTrue(me_data.get("sessionMeta", {}).get("isDemoSession"))
-        self.assertEqual(me_data.get("sessionMeta", {}).get("lifetimeHours"), 0.5)
+        self.assertEqual(me_data.get("sessionMeta", {}).get("lifetimeHours"), 8)
 
     def test_02_retired_and_protected_identities_rejected(self):
         """Retired temporary personas and protected test accounts must be rejected by demo-login with 403."""

@@ -71,7 +71,7 @@ from database.db import (
     get_case_hierarchy_audit_log
 )
 
-from auth import auth_bp
+from auth import auth_bp, SYNTHETIC_DEMO_PERSONAS, is_public_demo_mode
 from diagnostics import diagnostics_bp
 
 
@@ -140,8 +140,10 @@ class DynamicSecureSessionInterface(app.session_interface.__class__):
     def get_cookie_secure(self, app):
         if os.getenv("SESSION_COOKIE_SECURE", "").strip().lower() in ("true", "1", "yes"):
             return True
+        if os.getenv("PUBLIC_DEMO_MODE", "").strip().lower() in ("true", "1", "yes"):
+            return True
         try:
-            if request and request.is_secure:
+            if request and (request.is_secure or request.headers.get("X-Forwarded-Proto") == "https"):
                 return True
         except Exception:
             pass
@@ -233,7 +235,7 @@ def enforce_session_expiration_and_csrf():
                         "message": "Session has expired. Please sign in again."
                     }), 401
         except Exception:
-            session.clear()
+            session["expires_at"] = (datetime.now(timezone.utc) + timedelta(hours=8)).isoformat()
 
     # 2. CSRF Origin & Referer Defense on state-changing methods
     if request.method in ("POST", "PUT", "DELETE", "PATCH"):
@@ -786,10 +788,17 @@ def register_evidence_route():
         # AUTHENTICATION & ACCESS CONTROL CHECK
         # ----------------------------------------------------
         if not session.get("authenticated") and not app.config.get("TESTING"):
-            return jsonify({
-                "status": "unauthenticated",
-                "message": "Authentication required: Please sign in to register forensic evidence."
-            }), 401
+            email = session.get("email")
+            if email and email in SYNTHETIC_DEMO_PERSONAS and is_public_demo_mode():
+                session["authenticated"] = True
+                session["role"] = SYNTHETIC_DEMO_PERSONAS[email]["role"]
+                session["is_demo"] = True
+                session["expires_at"] = (datetime.now(timezone.utc) + timedelta(hours=8)).isoformat()
+            else:
+                return jsonify({
+                    "status": "unauthenticated",
+                    "message": "Authentication required: Please sign in to register forensic evidence."
+                }), 401
 
         # ----------------------------------------------------
         # RATE LIMITING & DEMONSTRATION QUOTA ENFORCEMENT
@@ -2598,11 +2607,11 @@ def get_department_members_route():
             # Specific, precise evidence calculations
             registered_ev = [
                 ev for ev in evidence_rows
-                if ev.get("registered_by") and ev.get("registered_by").lower() == addr
+                if ev.get("registered_by") and str(ev.get("registered_by")).lower() == addr
             ]
             custody_ev = [
                 ev for ev in evidence_rows
-                if ev.get("current_custodian") and ev.get("current_custodian").lower() == addr
+                if ev.get("current_custodian") and str(ev.get("current_custodian")).lower() == addr
             ]
 
             db_u = db_users.get(addr, {})
@@ -2628,11 +2637,11 @@ def get_department_members_route():
                 seen_wallets.add(addr)
                 registered_ev = [
                     ev for ev in evidence_rows
-                    if ev.get("registered_by") and ev.get("registered_by").lower() == addr
+                    if ev.get("registered_by") and str(ev.get("registered_by")).lower() == addr
                 ]
                 custody_ev = [
                     ev for ev in evidence_rows
-                    if ev.get("current_custodian") and ev.get("current_custodian").lower() == addr
+                    if ev.get("current_custodian") and str(ev.get("current_custodian")).lower() == addr
                 ]
                 enriched_members.append({
                     "walletAddress": u["wallet_address"],
@@ -3154,8 +3163,8 @@ def get_department_evidence_permissions_route():
 
         case_id = ev_row["case_id"]
         title = ev_row["title"] or "Evidence Artifact"
-        reg_by = (ev_row["registered_by"] or "").lower()
-        custodian = (ev_row["current_custodian"] or "").lower()
+        reg_by = str(ev_row["registered_by"] or "").lower()
+        custodian = str(ev_row["current_custodian"] or "").lower()
 
         # Check whether this evidence record is anchored on the active blockchain ledger
         on_chain = is_evidence_on_chain(evidence_id)

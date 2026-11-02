@@ -41,6 +41,16 @@ export function LoginModal({ isOpen, onClose, onLoginSuccess }) {
         setMaskedEmail(res.maskedEmail || identifier);
         setOtp(["", "", "", "", "", ""]);
         setStep("mfa");
+      } else if (res.status === "success" && res.user) {
+        setStep("success");
+        setTimeout(() => {
+          onLoginSuccess(res.user);
+          setStep("credentials");
+          setIdentifier("");
+          setPassword("");
+          setOtp(["", "", "", "", "", ""]);
+          onClose();
+        }, 500);
       } else {
         setError(res.message || "Authentication failed.");
       }
@@ -176,7 +186,7 @@ export function LoginModal({ isOpen, onClose, onLoginSuccess }) {
           {step === "mfa" && (
             <form onSubmit={handleVerifyOtp}>
               <p style={{ marginBottom: "14px", fontSize: "12.5px", color: "var(--text-secondary)" }}>
-                Enter the dynamic 6-digit verification code dispatched for {maskedEmail}. (Check backend terminal in development mode).
+                Enter the dynamic 6-digit verification code dispatched for {maskedEmail}. (For public demo evaluation, enter code <code>123456</code> or check terminal).
               </p>
 
               <div style={{ display: "flex", gap: "8px", justifyContent: "center", margin: "16px 0" }}>

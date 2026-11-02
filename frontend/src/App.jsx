@@ -231,6 +231,12 @@ export default function App() {
     return () => window.removeEventListener("pointermove", handleMouseMove);
   }, []);
 
+  // Reset view-specific transient errors on navigation
+  useEffect(() => {
+    setRegisterError("");
+    setVerifyError("");
+  }, [activeView]);
+
   // Subtle magnetic attraction for primary action controls
   useEffect(() => {
     // Only apply if user does not prefer reduced motion
@@ -513,8 +519,18 @@ export default function App() {
         setEvidenceList(listRes.evidence);
       }
     } catch (err) {
-      setRegisterError(err.message || "Registration failed.");
-      showToast(err.message || "Registration failed.", "error", null, "REGISTRATION FAILED");
+      const errMsg = err.message || "Registration failed.";
+      setRegisterError(errMsg);
+      showToast(errMsg, "error", null, "REGISTRATION FAILED");
+      // Synchronize frontend auth state if session expired or unauthenticated
+      if (
+        err.status === 401 ||
+        errMsg.toLowerCase().includes("authentication required") ||
+        errMsg.toLowerCase().includes("session has expired")
+      ) {
+        setCurrentUser(null);
+        setIsAuthenticated(false);
+      }
     } finally {
       setRegisterLoading(false);
     }

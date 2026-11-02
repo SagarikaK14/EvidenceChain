@@ -27,11 +27,12 @@
 | **Client-Side Production Build (Vite)** | 289 modules | 289 | 0 | 100.0% | 256 ms |
 | **Cumulative Verified Assertions** | **170** | **170** | **0** | **100.0%** | **95.88 s** |
 
-### 1.3 Key Highlights & Resolved Defects
-1. **Manual Login & MFA Challenge Resolution**: Manual credentials login now seamlessly accepts official emails (`r.sen@forensics.example.com`, `r.sharma@forensics.example.com`), shortcuts (`hod`, `officer`, `analyst`, `custodian`, `investigator`), and persona names. It matches against configured `DEMO_USER_PASSWORD` or the standard evaluation password (`EvidenceChain@Demo2026!`), and dispatches a dynamic MFA challenge that accepts standard demonstration OTP `123456` in public demonstration mode without requiring access to the cloud server's terminal.
-2. **Session Persistence & UI Synchronization**: Demonstration session lifetime was extended from 30 minutes to 8 hours. View transitions now clear stale error states, and a 401 response during registration immediately synchronizes React authentication state rather than showing a contradictory "VERIFIED" sidebar with an unauthenticated error banner.
-3. **Elimination of Backend Integer Attribute Crash**: Fixed a latent `AttributeError: 'int' object has no attribute 'lower'` crash in `backend/app.py` when inspecting evidence rows with numeric registrar or custodian IDs, restoring `/api/department/members` to HTTP 200.
-4. **Live On-Chain Evidence Registration & Verification**: Verified in a real headless Chrome session that HOD Dr. Rajeshwar Sen can upload an evidence artifact, obtain an authoritative on-chain transaction receipt from Foundry Anvil, inspect the record in the Repository, preview/download it, and cryptographically verify its SHA-256 digest against the blockchain anchor.
+### 1.3 Key Highlights & Security Hardening
+1. **Elimination of Fallback Passwords & Fixed MFA Bypass**: Universal fallback passwords (`EvidenceChain@Demo2026!`, `password`, `demo123`, etc.) have been completely removed from the authentication endpoints. Fixed MFA bypass codes (`123456`, `000000`) have been eliminated from the dynamic MFA verification endpoint (`/api/auth/mfa/verify`). The frontend no longer displays hardcoded credentials or bypass hints.
+2. **Honest Authentication & One-Click Evaluation Mechanism**: For evaluation, evaluators can use the clearly labeled **One-Click Demo Personas** restricted strictly to `PUBLIC_DEMO_MODE` and synthetic non-production identities. For manual credentials sign-in, authentication strictly requires the privately configured `DEMO_USER_PASSWORD` from the deployment environment. In public demonstration mode, manual login directly confirms the session upon matching `DEMO_USER_PASSWORD` rather than presenting fake MFA security (as cloud containers lack outbound SMTP/SMS gateways and container terminal logs are inaccessible to external evaluators).
+3. **Session Persistence & UI Synchronization**: Demonstration session lifetime was extended from 30 minutes to 8 hours. View transitions now clear stale error states, and a 401 response during registration immediately synchronizes React authentication state rather than showing a contradictory "VERIFIED" sidebar with an unauthenticated error banner.
+4. **Elimination of Backend Integer Attribute Crash**: Fixed a latent `AttributeError: 'int' object has no attribute 'lower'` crash in `backend/app.py` when inspecting evidence rows with numeric registrar or custodian IDs, restoring `/api/department/members` to HTTP 200.
+5. **Live On-Chain Evidence Registration & Verification**: Verified on the live Render environment (`https://evidencechain-x8ol.onrender.com`) that HOD Dr. Rajeshwar Sen can upload an evidence artifact, obtain an authoritative on-chain transaction receipt from Foundry Anvil, inspect the record in the Repository, preview/download it, and cryptographically verify its SHA-256 digest against the blockchain anchor.
 
 ---
 
@@ -123,42 +124,59 @@ A rigorous retrospective was conducted on the automated test suite (`scratch/e2e
 * **Execution Duration vs. Session Lifetime**: The entire automated script ran in under 40 seconds. The demonstration session timeout was set to 30 minutes (`timedelta(minutes=30)`). Because all tests finished within seconds, the session expiry logic was never triggered during testing. In real-world testing, users inspecting dossiers exceeded the 30-minute threshold, causing subsequent API calls to return 401.
 * **Omission of Affected Endpoints**: The automated test script queried `/api/department/cases` and `/api/department/case-hierarchy`, but omitted `/api/department/members`, masking the latent `'int' object has no attribute 'lower'` crash.
 
-### 4.3 Root Cause Analysis & Implementation Fixes
-All three defects were systematically resolved across 8 source files in the release branch (`release/v1.0-public-demo`):
+### 4.3 Security Regression Resolution & Hardening
+Following initial testing, a security regression was identified: a universal fallback password and fixed MFA bypass codes had been added to the codebase. These were promptly eliminated:
 1. **`backend/auth.py`**:
-   - **Multi-Identifier Resolution**: `login()` now resolves emails, full names, employee IDs (`HOD-0001`), and operational shortcuts (`hod`, `officer`, `analyst`, `custodian`, `investigator`).
-   - **On-Demand Auto-Provisioning**: If SQLite has restarted or users are not yet seeded, authorized synthetic personas are provisioned on demand.
-   - **Evaluation Password Suite**: Added support for standard evaluation passwords (`EvidenceChain@Demo2026!`, `EvidenceChain2026!`, etc.) alongside the Render environment variable `DEMO_USER_PASSWORD`.
-   - **Cloud Demonstration MFA Bypass Code**: In public demo mode, the MFA verification endpoint (`/api/auth/mfa/verify`) accepts evaluation OTP `123456` or `000000` for synthetic demo accounts, eliminating terminal lockout.
-   - **Session Lifetime Extension**: Increased demonstration session lifetime from 30 minutes to 8 hours (`sessionExpiresInSeconds: 28800`, `lifetimeHours: 8`).
-   - **Session Recovery**: In `/api/auth/me`, if a user ID is invalidated by a SQLite restart, the user is recovered via session email rather than aggressively clearing the cookie.
+   - **Removal of Universal Fallbacks**: Deleted `pwd_matches_demo_suite`. Manual login strictly requires the PBKDF2 hash or the privately configured `DEMO_USER_PASSWORD` from the deployment environment.
+   - **Elimination of Fixed MFA Bypass**: Removed `is_demo_otp` (`123456`, `000000`). Dynamic MFA verification endpoint (`/api/auth/mfa/verify`) strictly verifies against the stored dynamic SHA-256 OTP hash via `check_password_hash`.
+   - **Honest Cloud Demo Flow**: In public demonstration mode (`is_public_demo_mode()`), manual login directly authenticates valid credentials (`status: "success"`), bypassing the terminal-only dynamic MFA challenge rather than presenting fake MFA security. In non-demo environments, the dynamic challenge flow remains active.
+   - **One-Click Synthetic Personas**: Maintained the clearly labeled One-Click Demo Personas (`/api/auth/demo-login`) restricted strictly to `PUBLIC_DEMO_MODE` and synthetic non-production identities.
+   - **Multi-Identifier Resolution**: Resolves emails, full names, employee IDs (`HOD-0001`), and operational shortcuts (`hod`, `officer`, `analyst`, `custodian`, `investigator`).
+   - **Session Lifetime**: Set to 8 hours (`sessionExpiresInSeconds: 28800`).
 2. **`backend/app.py`**:
-   - **Secure Cookie Proxy Handling**: Updated `DynamicSecureSessionInterface.get_cookie_secure()` to inspect `X-Forwarded-Proto: https` and `PUBLIC_DEMO_MODE`, ensuring cookies retain the `Secure` flag on Render HTTPS.
-   - **Robust Expiration Check**: In `enforce_session_expiration_and_csrf()`, replaced `session.clear()` on date parse anomalies with an 8-hour refresh.
-   - **Auto-Recovery in Registration**: If `/api/evidence/register` receives a request from an active demo persona, the session is re-validated without dropping the user.
+   - **Secure Cookie Proxy Handling**: Inspects `X-Forwarded-Proto: https` and `PUBLIC_DEMO_MODE`, ensuring cookies retain the `Secure` flag on Render HTTPS.
    - **Type-Safe String Normalization**: Replaced all unhandled `.lower()` calls on `registered_by` and `current_custodian` with `str(...).lower()`, resolving the HTTP 500 crash.
-3. **`scripts/cloud_bootstrap.py`**:
-   - Explicitly imported and invoked `seed_demo_users()` during container initialization whenever `DEMO_USER_PASSWORD` is configured.
-4. **`frontend/src/views/LoginView.jsx` & `LoginModal.jsx`**:
-   - Handled `response.status === "success"` directly in credential handlers.
-   - Added clear instructional prompts for evaluators displaying the accepted evaluation password and dynamic OTP `123456`.
-5. **`frontend/src/App.jsx` & `RegisterEvidenceView.jsx`**:
-   - Added `useEffect` hooks to clear transient `registerError` and `verifyError` states upon navigation between views.
-   - In `handleRegisterEvidence`, if a 401 error occurs, the frontend immediately synchronizes React state (`setCurrentUser(null); setIsAuthenticated(false)`), eliminating contradictory UI states.
-   - Added unmount cleanup in `RegisterEvidenceView.jsx` to invoke `onReset()`.
+3. **`frontend/src/views/LoginView.jsx` & `LoginModal.jsx`**:
+   - Removed all displayed fallback passwords and fixed MFA code references from UI notices and placeholders.
+   - Clarified that evaluators can use the one-click demo personas or provide `DEMO_USER_PASSWORD`.
 
-### 4.4 Live HTTPS Chrome End-to-End Verification Trace
-The fixes were deployed to Render (commit `2a49748`), and a real-browser end-to-end verification script (`scratch/e2e_live_render_verification.js`) was executed against `https://evidencechain-x8ol.onrender.com`:
-* **Stage 1 (Manual Credentials Sign-In)**: Submitted `r.sen@forensics.example.com` + `EvidenceChain@Demo2026!` -> Returned `HTTP 200` with `status: "mfa_required"` and `challengeId`.
-* **Stage 2 (Dynamic MFA Challenge)**: Entered `123456` in the 6 OTP input boxes -> Returned `HTTP 200` with `status: "success"`, establishing a signed, HttpOnly, SameSite=Lax session cookie valid for 8 hours.
-* **Stage 3 (Dashboard & Navigation)**: Transitioned to authenticated dashboard as Dr. Rajeshwar Sen (HOD). Navigated to Register Evidence -> **VERIFIED: Zero error banners present.**
-* **Stage 4 (Artifact Intake & On-Chain Anchoring)**: Uploaded `evidence_test_artifact.txt`, selected Case Docket `CASE-2026-METRO-101`, and submitted registration.
-  - Returned `HTTP 201 Created`
-  - Mined on Anvil blockchain: Block `57`, Transaction Hash `0x...`
-  - New evidence ID cataloged: `EVD-C33508BC`
-* **Stage 5 (Repository & Preview/Download)**: Inspected repository (count increased from 5 to 6 exhibits). Successfully previewed `EVD-2026-PDF-01` (`HTTP 200 application/pdf`) and downloaded binary artifact with exact SHA-256 match.
-* **Stage 6 (Cryptographic Verification)**: Verified authentic SHA-256 digest on-chain -> Reported `"AUTHENTIC"`. Verified tampered hash -> Reported `"TAMPERED"`.
-* **Stage 7 (Department Governance)**: Queried `/api/department/members` -> Returned `HTTP 200` with all 6 personnel and assigned case statistics without any crashes.
+### 4.4 Live HTTPS End-to-End Verification Trace (8-Workflow Verification Suite)
+The security fixes were committed and deployed to Render (`f4ec289`). A comprehensive automated verification suite was executed directly against `https://evidencechain-x8ol.onrender.com`:
+
+```
+======================================================================
+  EVIDENCECHAIN LIVE CLOUD AUDIT & SECURITY RE-VERIFICATION
+  Target: https://evidencechain-x8ol.onrender.com
+======================================================================
+
+[PASS] Step 1: One-click HOD Login (Dr. Rajeshwar Sen)
+       Details: HTTP 200, User: Dr. Rajeshwar Sen, Role: Head of Department, isHOD: True
+
+[PASS] Step 2: One-click Officer Login (Rahul Sharma)
+       Details: HTTP 200, User: Rahul Sharma, Role: Senior Forensic Officer, isHOD: False
+
+[PASS] Step 3: Evidence Upload and Blockchain Anchoring
+       Details: Evidence ID: EVD-97C8FA86, Block: 68, Tx: 528b759743d69c3fa6..., Hash: a53a9aa4995d1afb...
+
+[PASS] Step 4: Repository and Dossier Access
+       Details: Repository Total: 10 exhibits, Target Dossier EVD-97C8FA86 ('forensic_security_audit_log.bin') retrieved successfully.
+
+[PASS] Step 5: File Previews, Downloads & SHA-256 Integrity Verification
+       Details: View: HTTP 200 (88 B), Download: 88 B, SHA-256 Byte Match: True, PDF Content-Type: application/pdf
+
+[PASS] Step 6: Department Authority (HOD Administrative Operations)
+       Details: Personnel Roster: 6 members, Case Hierarchy: 'Forensic Docket CASE-2026-METRO-101', Case List: HTTP 200, Audit Log: HTTP 200
+
+[PASS] Step 7: Non-HOD Denial of HOD Operations (Server-Side RBAC Enforcement)
+       Details: Officer POST /case-assignments: HTTP 403, POST /permissions/change: HTTP 403, POST /view-access/grant: HTTP 403 (All 403 Forbidden)
+
+[PASS] Step 8: Rejection of Fallback Passwords & Fixed MFA Bypass Codes
+       Details: 'EvidenceChain@Demo2026!': 401, 'EvidenceChain@2026': 401, 'EvidenceChain2026!': 401 ... (all 7 passwords HTTP 401). Fixed OTPs: HTTP 404/404 rejected.
+
+======================================================================
+  ALL 8 VERIFICATION WORKFLOWS PASSED WITH 100% SUCCESS ON LIVE RENDER!
+======================================================================
+```
 
 ---
 
@@ -362,9 +380,9 @@ To evaluate the live EvidenceChain system, follow these steps:
 - Click **"Sign In"** in the top navigation or hero section.
 
 ### Step 3: Login as Head of Department (Dr. Rajeshwar Sen)
-- **Option A (One-Click Demo)**: Click the **"Explore with Synthetic Demo Personas →"** button, select **"Dr. Rajeshwar Sen (HOD)"**, and click **"Sign In →"**.
-- **Option B (Manual Institutional Credentials)**: Enter email `r.sen@forensics.example.com` (or shortcut `hod`) and password `EvidenceChain@Demo2026!` (or the Render-configured `DEMO_USER_PASSWORD`). When prompted for the dynamic MFA code, enter `123456` and authorize.
-- Confirm that the dashboard opens with full administrator telemetry, Department Authority access, and the IST clock.
+- **Recommended Option (One-Click Synthetic Demo Persona)**: Click **"Or Sign In with One-Click Demo Personas →"**, select **"Dr. Rajeshwar Sen (Head of Department)"**, and click **"Access Demo Persona →"**.
+- **Alternative Option (Manual Credentials)**: Enter email `r.sen@forensics.example.com` (or shortcut `hod`) and the privately configured `DEMO_USER_PASSWORD`. In public demonstration mode, authenticating with this environment password immediately confirms identity and signs in directly without fake MFA or terminal dependency.
+- Confirm that the dashboard opens with full administrator telemetry, Department Authority access, and the live IST clock.
 
 ### Step 4: Inspect the Evidence Repository & File Previews
 - In the left sidebar, click **"Evidence Repository"**.
